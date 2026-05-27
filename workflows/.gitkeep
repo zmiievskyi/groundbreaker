@@ -1,0 +1,2 @@
+# n8n workflow JSON exports go here (01_ingest.json … 08_followup.json).
+# Export from the n8n UI after building each workflow, commit alongside code.
