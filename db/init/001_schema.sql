@@ -41,6 +41,7 @@ CREATE TABLE companies (
     domain       TEXT,
     hq_location  TEXT,
     size         TEXT,
+    industry     TEXT,
     linkedin_url TEXT,
     UNIQUE (name, role)
 );
