@@ -19,9 +19,9 @@ A working 6-stage pipeline running against real data, with real artifacts in the
 | **Leads scored** | 13 |
 | **Deep-researched dossiers** | 8 (web-grounded, real source URLs) |
 | **Drafts generated** | 8 leads × 2 channels (email + LinkedIn) = 16 outreach rows |
-| **HITL decisions** | 1 approved (Rob Gire @ Vantage), 1 rejected, 6 awaiting review |
+| **HITL decisions** | 1 approved (Lead-A @ Vantage), 1 rejected, 6 awaiting review |
 
-Every artifact is idempotent and traceable: re-running any workflow doesn't double-insert, and `runs` logs every execution. **See [`docs/demo.md`](docs/demo.md)** for the real rows — discovered projects with source URLs, scored leads with rationales, an LLM-generated research dossier, the actual draft Claude wrote for Rob Gire, and the HITL approval stamps.
+Every artifact is idempotent and traceable: re-running any workflow doesn't double-insert, and `runs` logs every execution. **See [`docs/demo.md`](docs/demo.md)** for the real rows — discovered projects with source URLs, scored leads with rationales, an LLM-generated research dossier, the actual draft Claude wrote for the approved lead, and the HITL approval stamps. (Contact names are anonymized in the public docs as `Lead-A`…`Lead-M`; raw rows remain in Postgres and surface on the live demo behind basic auth.)
 
 ## Pipeline
 
@@ -112,7 +112,7 @@ A few choices that go beyond stitching nodes together:
 
 **Region derived from project, not query.** The discovery query origin (UK vs US-West) is *not* what determines region — the extracted project state is, via a state-to-region lookup map. A UK query that surfaces a Texas project gets correctly rejected as out-of-region.
 
-**Grounding gate to kill hallucinations.** The Information Extractor in `01_ingest` and `02_enrich` only accepts an extracted entity if every significant word of its name appears in the source snippet. Caught a "Kevin Antonelli, B2B SaaS PM" hallucination from a search result that legitimately surfaced him at Google, but where the model invented his title.
+**Grounding gate to kill hallucinations.** The Information Extractor in `01_ingest` and `02_enrich` only accepts an extracted entity if every significant word of its name appears in the source snippet. Caught a "Lead-B, B2B SaaS PM" hallucination from a search result that legitimately surfaced him at Google, but where the model invented his title.
 
 **Persona regex is deliberately narrow.** The classifier returns `null` for biz dev, finance, MEP, and facilities-management titles. Those *should* be null — they are not target buyer personas for excavation-as-a-service. Score correctly demotes them.
 

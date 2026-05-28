@@ -30,21 +30,21 @@ Firmographics resolved via Serper LinkedIn search + ScrapingBee LinkedIn page fe
 
 | score | contact | title | persona | status |
 |-------|---------|-------|---------|--------|
-| **82** | Rob Gire | VP of Construction | `gc_project_exec` | **approved** |
-| 81 | Kevin Antonelli | Senior Director of Construction | `gc_project_exec` | drafted |
-| 80 | Matthew Baker | Director, Construction, North America | `gc_project_exec` | drafted |
-| 79 | David DaCunha | VP of Construction | `gc_project_exec` | drafted |
-| 78 | Jennifer Trautman, AIA, NCARB, LEED ND | VP, North American Development Lead | `site_dev_mgr` | drafted |
-| 76 | Alexa Arena | Head of Real Estate Development | `site_dev_mgr` | drafted |
-| 73 | Josh Buis | SVP Business Development | `null` | **rejected** |
-| 73 | Alfonso Romano | Vice President | `null` | drafted |
-| 66 | Jason Pullen | Technical Director | `null` | scored (parked) |
-| 62 | Spencer Lamb | Chief Commercial Officer | `null` | scored (parked) |
-| 62 | Richard Collar | Chartered mechanical engineer | `null` | scored (parked) |
-| 61 | Rick Rembusch | VP/Controller | `null` | scored (parked) |
-| 58 | Brid Morton | Senior Director of Workplace Services | `null` | scored (parked) |
+| **82** | Lead-A | VP of Construction | `gc_project_exec` | **approved** |
+| 81 | Lead-B | Senior Director of Construction | `gc_project_exec` | drafted |
+| 80 | Lead-C | Director, Construction, North America | `gc_project_exec` | drafted |
+| 79 | Lead-D | VP of Construction | `gc_project_exec` | drafted |
+| 78 | Lead-E | VP, North American Development Lead | `site_dev_mgr` | drafted |
+| 76 | Lead-F | Head of Real Estate Development | `site_dev_mgr` | drafted |
+| 73 | Lead-G | SVP Business Development | `null` | **rejected** |
+| 73 | Lead-H | Vice President | `null` | drafted |
+| 66 | Lead-I | Technical Director | `null` | scored (parked) |
+| 62 | Lead-J | Chief Commercial Officer | `null` | scored (parked) |
+| 62 | Lead-K | Chartered mechanical engineer | `null` | scored (parked) |
+| 61 | Lead-L | VP/Controller | `null` | scored (parked) |
+| 58 | Lead-M | Senior Director of Workplace Services | `null` | scored (parked) |
 
-Each score comes with a one-line LLM-written rationale stored in `leads.score_reason`. Example for Rob Gire:
+Each score comes with a one-line LLM-written rationale stored in `leads.score_reason`. Example for Lead-A:
 
 > Top drivers: strong persona fit (VP of Construction contact) and project is a datacenter. Primary negative: unknown earthworks volume limits confidence on project scope.
 
@@ -54,11 +54,11 @@ The Research Lead Information Extractor runs OpenAI mini with the Responses API 
 
 ```json
 {
-  "sources": "https://www.linkedin.com/in/rob-gire-41b325109,https://vantage-dc.com,https://www.linkedin.com/company/vantage-data-centers",
-  "summary": "Lead: Second London data center campus (London, UK) — Vantage Data Centers. Contact: Rob Gire, Vice President of Construction (persona: gc_project_exec). Company HQ: Denver, Colorado. Industry: IT Services and IT Consulting. Employee size: 1,001-5,000. Project stage: unknown. Sources: company website and LinkedIn profiles.",
+  "sources": "https://vantage-dc.com,https://www.linkedin.com/company/vantage-data-centers",
+  "summary": "Lead: Second London data center campus (London, UK) — Vantage Data Centers. Contact: Lead-A, Vice President of Construction (persona: gc_project_exec). Company HQ: Denver, Colorado. Industry: IT Services and IT Consulting. Employee size: 1,001-5,000. Project stage: unknown. Sources: company website and LinkedIn profiles.",
   "recent_news": "No recent public announcements specifically about Vantage's Second London campus were found in the provided sources.",
-  "icebreaker_1": "Rob — congrats on your role at Vantage. For London campuses with tight footprints and deep excavations, how are you approaching mass excavation sequencing and cut/fill to minimize equipment congestion and local traffic impacts?",
-  "icebreaker_2": "Rob — would you be open to a brief 15-minute call to explore whether an excavation-as-a-service or equipment-sharing model could shorten mobilization and reduce equipment overlap on Vantage's Second London campus?"
+  "icebreaker_1": "Lead-A — congrats on your role at Vantage. For London campuses with tight footprints and deep excavations, how are you approaching mass excavation sequencing and cut/fill to minimize equipment congestion and local traffic impacts?",
+  "icebreaker_2": "Lead-A — would you be open to a brief 15-minute call to explore whether an excavation-as-a-service or equipment-sharing model could shorten mobilization and reduce equipment overlap on Vantage's Second London campus?"
 }
 ```
 
@@ -68,9 +68,9 @@ Email resolved by Hunter (in-budget — only top-scored leads ever touch the API
 
 Both an email and a LinkedIn variant get produced per approved lead. The system prompt is in [`prompts/draft_outreach.md`](../prompts/draft_outreach.md); the model is instructed to use one icebreaker from the dossier verbatim, then bridge to Lumina's value prop (32-ton autonomous electric dozer, ~50% lower $/cu yd vs diesel, zero emissions).
 
-**Email — Rob Gire (subject: "Excavation approach for London campus")**
+**Email — Lead-A (subject: "Excavation approach for London campus")**
 
-> Rob — congrats on your role at Vantage. For London campuses with tight footprints and deep excavations, how are you approaching mass excavation sequencing and cut/fill to minimize equipment congestion and local traffic impacts?
+> Lead-A — congrats on your role at Vantage. For London campuses with tight footprints and deep excavations, how are you approaching mass excavation sequencing and cut/fill to minimize equipment congestion and local traffic impacts?
 >
 > We self-perform excavation with a 32-ton autonomous electric dozer that costs roughly 50% less per cubic yard than a diesel D9, runs zero emissions, and removes operators from hazardous grading work. On constrained urban sites, the smaller footprint and teleoperated operation often cut mobilization time and reduce equipment overlap.
 >
@@ -78,17 +78,17 @@ Both an email and a LinkedIn variant get produced per approved lead. The system 
 
 **LinkedIn variant (single paragraph, no subject)**
 
-> Rob — for London's tight footprints and deep cuts, how are you sequencing excavation to minimize congestion? We self-perform with a 32-ton autonomous electric dozer: ~50% lower cost/cy, zero emissions, teleoperated. Often cuts mobilization and equipment overlap on constrained sites. Open to a quick call?
+> Lead-A — for London's tight footprints and deep cuts, how are you sequencing excavation to minimize congestion? We self-perform with a 32-ton autonomous electric dozer: ~50% lower cost/cy, zero emissions, teleoperated. Often cuts mobilization and equipment overlap on constrained sites. Open to a quick call?
 
 ## Stage 6 — HITL decision
 
-The reviewer opened `http://localhost:5678/form/approve-lead`, picked the lead from the form description's SQL hint (which queries pending drafts inline), submitted `approve` for Rob Gire and `reject` for Josh Buis.
+The reviewer opened `http://localhost:5678/form/approve-lead`, picked the lead from the form description's SQL hint (which queries pending drafts inline), submitted `approve` for Lead-A and `reject` for Lead-G.
 
 ```text
  lead | contact   | decision | leads.status | outreach.approved_by
  ---- | --------- | -------- | ------------ | --------------------
-   4  | Rob Gire  | approve  | approved     | demo reviewer (both rows: email, linkedin)
-   2  | Josh Buis | reject   | rejected     | NULL (no stamp)
+   4  | Lead-A  | approve  | approved     | demo reviewer (both rows: email, linkedin)
+   2  | Lead-G | reject   | rejected     | NULL (no stamp)
 ```
 
 `outreach.approved_at` and `outreach.approved_by` are set in the *same* CTE that flips `leads.status`, gated by `WHERE leads.status='drafted'` so re-submissions are no-ops.

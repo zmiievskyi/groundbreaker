@@ -5,7 +5,7 @@
       "args": [
         "-y",
         "mcp-remote",
-        "http://192.168.4.208:5678/mcp-server/http",
+        "http://<your-n8n-host>:5678/mcp-server/http",
         "--allow-http",
         "--header",
         "Authorization:Bearer ${N8N_MCP_TOKEN}"

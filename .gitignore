@@ -30,3 +30,5 @@ scratch/
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+# internal working notes (iteration trace, decisions log) — local-only
+CHANGELOG.md

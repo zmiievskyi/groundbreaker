@@ -512,7 +512,7 @@ export default function App() {
       <Section label="try the human approval gate">
         <p className="text-[12px]">
           Stage 06 exposes a public form (no n8n login needed). Pick a draft from the leads table above with status{' '}
-          <code>drafted</code> (e.g. lead id 11 — Kevin Antonelli @ Google, score 81) and decide for yourself —
+          <code>drafted</code> (e.g. lead id 11 — Lead-B @ Google, score 81) and decide for yourself —
           approve or reject. Decisions stamp the database in real time and you'll see them reflected on next refresh.
         </p>
         <a
