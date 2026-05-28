@@ -1,0 +1,340 @@
+[
+  {
+    "updatedAt": "2026-05-28T12:36:27.870Z",
+    "createdAt": "2026-05-28T12:36:08.538Z",
+    "id": "V5Wj4Ab0kfl0KYjV",
+    "name": "04 Deep Research + Hunter",
+    "description": "For top-scored leads (fit_score >= MIN_FIT_SCORE), runs web-grounded research via OpenAI mini Responses API + builtin webSearch, finds emails via Hunter, writes dossier + email + advances status to researched.",
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+      {
+        "id": "00bdad5b-18c7-4e67-8582-480546b64c69",
+        "name": "Hourly Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 1
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "ca113637-172f-40d2-8fff-0174962406f5",
+        "name": "Select Top-Scored Leads",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT l.id AS lead_id, p.name AS project_name, p.region, p.state, p.timeline_stage, p.owner_company, co.name AS company_name, co.domain, co.industry, co.hq_location, co.size AS company_size, co.linkedin_url AS company_linkedin, c.name AS contact_name, c.title AS contact_title, c.persona, c.linkedin_url AS contact_linkedin, l.fit_score, l.score_reason FROM leads l JOIN projects p ON l.project_id=p.id JOIN companies co ON l.company_id=co.id JOIN contacts c ON l.contact_id=c.id WHERE l.status = 'scored' AND l.fit_score >= $1 AND l.researched_at IS NULL ORDER BY l.fit_score DESC LIMIT 20",
+          "options": {
+            "queryReplacement": "={{ $env.MIN_FIT_SCORE || \"70\" }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "869fbf31-7fde-424a-aa4b-fbc601dcaf10",
+        "name": "Build Research Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const items = $input.all();\nconst out = [];\nconst splitName = (full) => {\n  const clean = String(full || '').split(',')[0].trim();\n  const parts = clean.split(/\\s+/).filter(Boolean);\n  return { first: parts[0] || '', last: parts[parts.length - 1] || '' };\n};\nfor (const it of items) {\n  const r = it.json || {};\n  const n = splitName(r.contact_name);\n  const text =\n    'PROJECT: ' + (r.project_name || 'unknown') + ' (' + (r.region || '?') + ', ' + (r.state || '?') + '), stage=' + (r.timeline_stage || 'unknown') + '. Owner: ' + (r.owner_company || 'unknown') + '.\\n' +\n    'COMPANY: ' + (r.company_name || '?') + ' — ' + (r.industry || 'unknown industry') + ', HQ ' + (r.hq_location || 'unknown') + ', ' + (r.company_size || 'unknown size') + '. Website: ' + (r.domain || 'unknown') + '. LinkedIn: ' + (r.company_linkedin || 'unknown') + '.\\n' +\n    'CONTACT: ' + (r.contact_name || '?') + ' — ' + (r.contact_title || '?') + ' (persona: ' + (r.persona || 'unclassified') + '). LinkedIn: ' + (r.contact_linkedin || 'unknown') + '.';\n  out.push({ json: {\n    lead_id: r.lead_id,\n    domain: r.domain || '',\n    contact_first_name: n.first,\n    contact_last_name: n.last,\n    input_text: text\n  } });\n}\nreturn out;"
+        }
+      },
+      {
+        "id": "3de4f9a6-104f-4288-a22e-b06aca28fc34",
+        "name": "Research Lead",
+        "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+        "typeVersion": 1.2,
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "text": "={{ $json.input_text }}",
+          "schemaType": "fromJson",
+          "jsonSchemaExample": "{ \"summary\": \"2-sentence overview of the specific project and company status.\", \"recent_news\": \"One concrete recent news/announcement with a date if possible.\", \"icebreaker_1\": \"Specific personalization hook for outreach: a recent groundbreaking, exec move, expansion announcement.\", \"icebreaker_2\": \"A second concrete hook (different angle).\", \"sources\": \"https://url1, https://url2\" }",
+          "options": {
+            "systemPromptTemplate": "You research a B2B sales lead for Lumina (CA/UK startup providing excavation-as-a-service for grading-heavy construction projects, especially data centers). Use web search to find current, citable information for personalized first-touch outreach.\n\nFocus on:\n- The specific named project (status, scope, milestones, contractors)\n- The owner company (recent press, executive moves, expansion plans)\n- The contact persona (recent talks, job moves, articles)\n\nRules:\n- Be factual and concrete. Cite sources for any claim (sources field = comma-separated URLs you actually used).\n- If web search returns nothing useful for a field, leave it empty — do not invent.\n- Each icebreaker must reference a specific factual hook (a recent groundbreaking, an exec quote, a campus expansion). Avoid generic compliments.\n- Prefer recent / authoritative sources when web results conflict.",
+            "batching": {
+              "batchSize": 1,
+              "delayBetweenBatches": 0
+            }
+          }
+        }
+      },
+      {
+        "id": "f3497a8c-13be-4862-a48d-526400762b63",
+        "name": "OpenAI Mini + Web Search",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          660,
+          220
+        ],
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "gpt-5-mini",
+            "cachedResultName": "gpt-5-mini"
+          },
+          "responsesApiEnabled": true,
+          "builtInTools": {
+            "webSearch": {
+              "searchContextSize": "medium"
+            }
+          },
+          "options": {
+            "timeout": 240000,
+            "maxRetries": 3,
+            "reasoningEffort": "low"
+          }
+        },
+        "credentials": {
+          "openAiApi": {
+            "id": "LrB9Tqn1l7NgbmUd",
+            "name": "OpenAI account"
+          }
+        }
+      },
+      {
+        "id": "8f54aa35-0ab5-47c0-b673-6dfbf4241a43",
+        "name": "Hunter Email Finder",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          880,
+          0
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://api.hunter.io/v2/email-finder?domain={{ encodeURIComponent($(\"Build Research Input\").item.json.domain) }}&first_name={{ encodeURIComponent($(\"Build Research Input\").item.json.contact_first_name) }}&last_name={{ encodeURIComponent($(\"Build Research Input\").item.json.contact_last_name) }}&api_key={{ $env.HUNTER_API_KEY }}",
+          "options": {
+            "timeout": 20000,
+            "response": {
+              "response": {
+                "neverError": true
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "af7c9654-bd39-47af-b546-36c39aa06fb2",
+        "name": "Build Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1100,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const inputs = $('Build Research Input').all();\nconst research = $('Research Lead').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const base = (inputs[i] && inputs[i].json) ? inputs[i].json : {};\n  const r = (research[i] && research[i].json) ? research[i].json : {};\n  const h = items[i].json || {};\n  const dossier = (r.output && typeof r.output === 'object') ? r.output : (typeof r === 'object' ? r : {});\n  const hd = (h.data && typeof h.data === 'object') ? h.data : {};\n  const email = hd.email || null;\n  const confidence = (hd.score != null && Number.isFinite(Number(hd.score))) ? (Number(hd.score) / 100) : null;\n  out.push({ json: {\n    lead_id: base.lead_id,\n    research_dossier: dossier,\n    email: email,\n    email_confidence: confidence\n  } });\n}\nreturn out;"
+        }
+      },
+      {
+        "id": "376618fe-5ab5-4864-a847-7251a767aa42",
+        "name": "Apply Research + Email",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1320,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH input AS (SELECT ($1::jsonb) AS d), upd_lead AS (UPDATE leads SET research_dossier = (i.d->'research_dossier'), researched_at = now(), status = 'researched'::lead_status, updated_at = now() FROM input i WHERE leads.id = ((i.d->>'lead_id')::bigint) RETURNING leads.contact_id) UPDATE contacts SET email = NULLIF((i.d->>'email'),''), email_confidence = NULLIF((i.d->>'email_confidence'),'')::numeric FROM upd_lead, input i WHERE contacts.id = upd_lead.contact_id RETURNING contacts.id, contacts.email",
+          "options": {
+            "queryReplacement": "={{ JSON.stringify({lead_id: $json.lead_id, research_dossier: $json.research_dossier, email: $json.email, email_confidence: $json.email_confidence}) }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "7bfa0b8c-1fa7-4e0d-94c9-db2a23bb9a57",
+        "name": "Log Run",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1540,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO runs (workflow, finished_at, items_out, notes) VALUES ('04_research', now(), $1, 'research + hunter run')",
+          "options": {
+            "queryReplacement": "={{ $(\"Apply Research + Email\").all().length }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        },
+        "executeOnce": true
+      }
+    ],
+    "connections": {
+      "Hourly Schedule": {
+        "main": [
+          [
+            {
+              "node": "Select Top-Scored Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Select Top-Scored Leads": {
+        "main": [
+          [
+            {
+              "node": "Build Research Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Research Input": {
+        "main": [
+          [
+            {
+              "node": "Research Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Research Lead": {
+        "main": [
+          [
+            {
+              "node": "Hunter Email Finder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI Mini + Web Search": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Research Lead",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Hunter Email Finder": {
+        "main": [
+          [
+            {
+              "node": "Build Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Payload": {
+        "main": [
+          [
+            {
+              "node": "Apply Research + Email",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Apply Research + Email": {
+        "main": [
+          [
+            {
+              "node": "Log Run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": true
+    },
+    "staticData": null,
+    "meta": {
+      "aiBuilderAssisted": true,
+      "builderVariant": "mcp"
+    },
+    "pinData": null,
+    "versionId": "19980b4e-a6a0-489d-b45e-7615195dc693",
+    "activeVersionId": null,
+    "versionCounter": 1,
+    "triggerCount": 0,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-05-28T12:36:08.538Z",
+        "createdAt": "2026-05-28T12:36:08.538Z",
+        "role": "workflow:owner",
+        "workflowId": "V5Wj4Ab0kfl0KYjV",
+        "projectId": "e96jozbn85ul708O",
+        "project": {
+          "updatedAt": "2026-05-27T19:07:26.928Z",
+          "createdAt": "2026-05-27T19:01:50.649Z",
+          "id": "e96jozbn85ul708O",
+          "name": "anton zmievsky <anton.zmievsky@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "fec08c2e-8c48-4c09-af8f-7c397ab3734c"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]
