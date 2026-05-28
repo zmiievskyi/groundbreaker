@@ -1,0 +1,189 @@
+[
+  {
+    "updatedAt": "2026-05-28T14:18:20.437Z",
+    "createdAt": "2026-05-28T14:05:41.049Z",
+    "id": "qmYrdkZLZQf6VJzS",
+    "name": "06 Approve — Human Gate",
+    "description": "Human-in-the-loop approval gate. Form Trigger workflow exposes a public URL; reviewer enters lead_id + decision (approve/reject) + approver name. On approve, stamps outreach rows and advances leads.status; on reject, sets rejected.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "id": "54cc19a6-1b9c-47b9-b981-7d105fb98b1a",
+        "name": "Approval Form",
+        "type": "n8n-nodes-base.formTrigger",
+        "typeVersion": 2.5,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "formTitle": "Approve Outreach Draft",
+          "formDescription": "<p>Review a drafted outreach lead and record approve/reject. The decision flips <code>leads.status</code> to <code>approved</code> or <code>rejected</code>; on approve, every <code>outreach</code> row for the lead (email + LinkedIn) gets stamped with <code>approved_by</code> + <code>approved_at</code>.</p><p><strong>To see pending lead IDs and their drafted subject lines:</strong><br><code>SELECT l.id, c.name, o.subject FROM leads l JOIN contacts c ON l.contact_id=c.id JOIN outreach o ON o.lead_id=l.id WHERE l.status='drafted' AND o.channel='email';</code></p>",
+          "formFields": {
+            "values": [
+              {
+                "fieldName": "lead_id",
+                "fieldLabel": "Lead ID",
+                "fieldType": "number",
+                "requiredField": true,
+                "placeholder": "e.g. 7"
+              },
+              {
+                "fieldName": "decision",
+                "fieldLabel": "Decision",
+                "fieldType": "dropdown",
+                "requiredField": true,
+                "fieldOptions": {
+                  "values": [
+                    {
+                      "option": "approve"
+                    },
+                    {
+                      "option": "reject"
+                    }
+                  ]
+                }
+              },
+              {
+                "fieldName": "approver",
+                "fieldLabel": "Approver (name or email)",
+                "fieldType": "text",
+                "requiredField": false,
+                "defaultValue": "demo reviewer"
+              },
+              {
+                "fieldName": "notes",
+                "fieldLabel": "Notes (optional)",
+                "fieldType": "textarea",
+                "requiredField": false,
+                "placeholder": "Why you approved/rejected this draft. Stored as workflow run notes."
+              }
+            ]
+          },
+          "responseMode": "onReceived",
+          "options": {
+            "path": "approve-lead",
+            "buttonLabel": "Submit Decision",
+            "appendAttribution": false,
+            "respondWithOptions": {
+              "values": {
+                "respondWith": "text",
+                "formSubmittedText": "Decision recorded. The lead status was advanced in the database. You can close this tab."
+              }
+            }
+          }
+        },
+        "webhookId": "635ea154-3ec3-434c-bfbb-c5fa040ad50c"
+      },
+      {
+        "id": "1223ab86-6b0c-4878-bef0-6e030dfbe1bc",
+        "name": "Apply Decision",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH input AS (SELECT ($1::jsonb) AS d), ap AS (UPDATE outreach SET approved_by = (i.d->>'approver'), approved_at = now() FROM input i WHERE outreach.lead_id = ((i.d->>'lead_id')::bigint) AND (i.d->>'decision') = 'approve' AND outreach.approved_at IS NULL RETURNING id) UPDATE leads SET status = CASE WHEN ((($1::jsonb)->>'decision') = 'approve') THEN 'approved'::lead_status ELSE 'rejected'::lead_status END, updated_at = now() WHERE leads.id = ((($1::jsonb)->>'lead_id')::bigint) AND leads.status = 'drafted'::lead_status RETURNING leads.id, leads.status",
+          "options": {
+            "queryReplacement": "={{ JSON.stringify({lead_id: $json.lead_id, decision: $json.decision, approver: $json.approver || \"demo reviewer\"}) }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "636a25f0-726b-4baa-af48-848aa20daa4b",
+        "name": "Log Run",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO runs (workflow, finished_at, items_out, notes) SELECT '06_approve', now(), (($1::jsonb)->>'items_out')::int, (($1::jsonb)->>'notes')",
+          "options": {
+            "queryReplacement": "={{ JSON.stringify({items_out: $(\"Apply Decision\").all().length, notes: \"lead_id=\" + $(\"Approval Form\").item.json.lead_id + \" decision=\" + $(\"Approval Form\").item.json.decision + \" by=\" + ($(\"Approval Form\").item.json.approver || \"unknown\")}) }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Approval Form": {
+        "main": [
+          [
+            {
+              "node": "Apply Decision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Apply Decision": {
+        "main": [
+          [
+            {
+              "node": "Log Run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": true
+    },
+    "staticData": null,
+    "meta": {
+      "aiBuilderAssisted": true,
+      "builderVariant": "mcp"
+    },
+    "pinData": null,
+    "versionId": "ce19ca58-31eb-41f3-bb9d-29a8cab481e6",
+    "activeVersionId": "ce19ca58-31eb-41f3-bb9d-29a8cab481e6",
+    "versionCounter": 2,
+    "triggerCount": 1,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-05-28T14:05:41.049Z",
+        "createdAt": "2026-05-28T14:05:41.049Z",
+        "role": "workflow:owner",
+        "workflowId": "qmYrdkZLZQf6VJzS",
+        "projectId": "e96jozbn85ul708O",
+        "project": {
+          "updatedAt": "2026-05-27T19:07:26.928Z",
+          "createdAt": "2026-05-27T19:01:50.649Z",
+          "id": "e96jozbn85ul708O",
+          "name": "anton zmievsky <anton.zmievsky@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "fec08c2e-8c48-4c09-af8f-7c397ab3734c"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]

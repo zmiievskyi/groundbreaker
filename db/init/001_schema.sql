@@ -41,6 +41,7 @@ CREATE TABLE companies (
     domain       TEXT,
     hq_location  TEXT,
     size         TEXT,
+    industry     TEXT,
     linkedin_url TEXT,
     UNIQUE (name, role)
 );
@@ -58,16 +59,18 @@ CREATE TABLE contacts (
 );
 
 CREATE TABLE leads (
-    id              BIGSERIAL PRIMARY KEY,
-    project_id      BIGINT NOT NULL REFERENCES projects(id),
-    company_id      BIGINT REFERENCES companies(id),
-    contact_id      BIGINT REFERENCES contacts(id),
-    fit_score       INTEGER,            -- 0..100
-    score_breakdown JSONB,              -- per-dimension points
-    score_reason    TEXT,               -- one-line LLM rationale
-    status          lead_status NOT NULL DEFAULT 'new',
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    id               BIGSERIAL PRIMARY KEY,
+    project_id       BIGINT NOT NULL REFERENCES projects(id),
+    company_id       BIGINT REFERENCES companies(id),
+    contact_id       BIGINT REFERENCES contacts(id),
+    fit_score        INTEGER,            -- 0..100
+    score_breakdown  JSONB,              -- per-dimension points
+    score_reason     TEXT,               -- one-line LLM rationale
+    research_dossier JSONB,              -- 04_research: web-grounded findings + icebreakers
+    researched_at    TIMESTAMPTZ,        -- 04_research stamp
+    status           lead_status NOT NULL DEFAULT 'new',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (project_id, company_id, contact_id)
 );
 

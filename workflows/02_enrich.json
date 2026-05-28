@@ -1,0 +1,582 @@
+[
+  {
+    "updatedAt": "2026-05-28T11:55:15.954Z",
+    "createdAt": "2026-05-28T10:25:10.763Z",
+    "id": "qmUQ325Fb13iudmJ",
+    "name": "02 Enrich — Decision-Makers",
+    "description": "For projects.status='new', searches LinkedIn via serper for decision-makers, extracts name/title with OpenAI mini, upserts companies/contacts/leads, advances project status to enriched. No Hunter.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours"
+              }
+            ]
+          }
+        },
+        "id": "c0e79ab2-3f14-4ede-9209-331b5314f7d4",
+        "name": "Hourly Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT id, owner_company, gc_company, earthworks_sub, name FROM projects WHERE status = 'new' AND owner_company IS NOT NULL ORDER BY id LIMIT 10",
+          "options": {}
+        },
+        "id": "e24f5e88-31f5-4187-b568-d4938310b8f8",
+        "name": "Select New Projects",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          224,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst out = [];\nfor (const it of items) {\n  const p = it.json || {};\n  if (!p.owner_company) continue;\n  const company = String(p.owner_company).trim();\n  if (!company) continue;\n  out.push({ json: {\n    project_id: p.id,\n    owner_company: company,\n    q: '\"' + company + '\" (VP OR director OR head) (construction OR project OR development OR site) site:linkedin.com/in',\n    num: 5,\n    gl: 'us'\n  } });\n}\nreturn out;"
+        },
+        "id": "1692d12c-8453-48ba-8349-fc664410e9a8",
+        "name": "Build People Queries",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          448,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://google.serper.dev/search",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={ \"q\": {{ JSON.stringify($json.q) }}, \"gl\": {{ JSON.stringify($json.gl) }}, \"num\": {{ $json.num }} }",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "891a11d3-61e2-46c9-97c0-630ee80997e8",
+        "name": "Serper People Search",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          672,
+          0
+        ],
+        "retryOnFail": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "HieSKCvzhYyKGJdB",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const queries = $('Build People Queries').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const meta = (queries[i] && queries[i].json) ? queries[i].json : {};\n  const organic = (items[i].json && Array.isArray(items[i].json.organic)) ? items[i].json.organic : [];\n  for (const o of organic) {\n    if (!o || !o.link) continue;\n    if (!/linkedin\\.com\\/in\\//i.test(o.link)) continue;\n    out.push({ json: {\n      project_id: meta.project_id,\n      owner_company: meta.owner_company,\n      title: o.title || '',\n      link: o.link,\n      snippet: o.snippet || ''\n    } });\n  }\n}\nreturn out;"
+        },
+        "id": "9ba61b13-e7bd-4ff0-8893-bf9d8b23e2c8",
+        "name": "Flatten People Results",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "text": "={{ $json.title }}\n{{ $json.snippet }}",
+          "attributes": {
+            "attributes": [
+              {
+                "name": "name",
+                "description": "The person's full name as it appears in the LinkedIn search result (e.g. 'Jane Smith'). Leave empty if the result is a company page, article, or not clearly a real person's profile."
+              },
+              {
+                "name": "job_title",
+                "description": "The person's job title at the company (e.g. 'VP Construction'). Leave empty if not stated."
+              },
+              {
+                "name": "company_match",
+                "description": "The company name the person is shown to work at, exactly as in the result. Leave empty if the result is unrelated to the target company."
+              }
+            ]
+          },
+          "options": {
+            "systemPromptTemplate": "You extract a single person's identity from a LinkedIn search result (title + snippet). Extract a value ONLY when it is explicitly present in the text — never invent names, titles, or companies. If the result is a company page, an article, a directory, or otherwise not a specific real person's profile, leave all fields empty.",
+            "batching": {
+              "batchSize": 1,
+              "delayBetweenBatches": 0
+            }
+          }
+        },
+        "id": "2c717415-336d-41f2-86c5-f75732864019",
+        "name": "Extract Decision Maker",
+        "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+        "typeVersion": 1.2,
+        "position": [
+          1104,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "gpt-5-mini",
+            "cachedResultName": "gpt-5-mini"
+          },
+          "builtInTools": {},
+          "options": {
+            "reasoningEffort": "low",
+            "timeout": 120000,
+            "maxRetries": 3
+          }
+        },
+        "id": "b3e7b0c9-8f2a-49d5-bd2f-2af28951035f",
+        "name": "OpenAI Mini",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          1104,
+          224
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "LrB9Tqn1l7NgbmUd",
+            "name": "OpenAI account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const src = $('Flatten People Results').all();\nconst items = $input.all();\nconst personaFromTitle = (t) => {\n  const s = String(t||'').toLowerCase();\n  if (/business development|biz dev|product development|sales|marketing|revenue|chief commercial/.test(s)) return null;\n  if (/earthwork|grading|excavat|civil work|sitework/.test(s)) return 'earthworks_sub';\n  if (/site dev|land dev|real estate|site selection|site acquisit|land acquisit|development (lead|director|manager|head|exec)/.test(s)) return 'site_dev_mgr';\n  if (/owner|asset manager|portfolio|investment manager|asset management/.test(s)) return 'owners_rep';\n  if (/construction|civil engineering|project (executive|director|manager)|head of project|site manager|delivery/.test(s)) return 'gc_project_exec';\n  return null;\n};\nconst rows = [];\nfor (let i = 0; i < items.length; i++) {\n  const j = items[i].json || {};\n  if (j.error) continue;\n  const ex = j.output ? j.output : j;\n  const s = (src[i] && src[i].json) ? src[i].json : {};\n  const name = String(ex.name || '').trim();\n  const title = String(ex.job_title || '').trim();\n  const link = String(s.link || '').trim();\n  if (!name || !title || !link) continue;\n  if (!/linkedin\\.com\\/in\\//i.test(link)) continue;\n  const resultText = (String(s.title||'') + ' ' + String(s.snippet||'')).toLowerCase();\n  const nameWords = name.toLowerCase().split(/\\s+/).filter(w => w.length >= 2);\n  if (nameWords.length === 0 || !nameWords.every(w => resultText.includes(w))) continue;\n  rows.push({ json: {\n    project_id: s.project_id,\n    owner_company: s.owner_company,\n    contact_name: name,\n    contact_title: title,\n    persona: personaFromTitle(title),\n    contact_linkedin: link\n  } });\n}\nreturn rows;"
+        },
+        "id": "002ce39f-6f85-4d7e-ba5e-14bc0dc30b2c",
+        "name": "Build Enrichment Rows",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1360,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH input AS (SELECT ($1::jsonb) AS d), c_up AS (INSERT INTO companies (name, role) SELECT (d->>'owner_company'), 'owner'::company_role FROM input ON CONFLICT (name, role) DO UPDATE SET name = EXCLUDED.name RETURNING id), ct_in AS (INSERT INTO contacts (company_id, name, title, persona, linkedin_url, source) SELECT c_up.id, (d->>'contact_name'), (d->>'contact_title'), NULLIF(d->>'persona',''), (d->>'contact_linkedin'), 'serp.dev' FROM c_up, input RETURNING id, company_id) INSERT INTO leads (project_id, company_id, contact_id, status) SELECT (d->>'project_id')::bigint, ct_in.company_id, ct_in.id, 'enriched'::lead_status FROM ct_in, input ON CONFLICT (project_id, company_id, contact_id) DO NOTHING RETURNING id, project_id",
+          "options": {
+            "queryReplacement": "={{ JSON.stringify($json) }}"
+          }
+        },
+        "id": "60531880-85ed-404b-a521-e404319034e9",
+        "name": "Upsert Lead",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1552,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO runs (workflow, finished_at, items_out, notes) VALUES ('02_enrich', now(), $1, 'enrich run')",
+          "options": {
+            "queryReplacement": "={{ $(\"Upsert Lead\").all().length }}"
+          }
+        },
+        "id": "0ce9d4b7-6cf8-4915-b59b-03b428b7d708",
+        "name": "Log Run",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1760,
+          0
+        ],
+        "executeOnce": true,
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE projects SET status = 'enriched' WHERE id = ANY(string_to_array($1, '|')::bigint[])",
+          "options": {
+            "queryReplacement": "={{ $(\"Select New Projects\").all().map(i => i.json.id).join(\"|\") }}"
+          }
+        },
+        "id": "f513abc8-bdc2-465d-b9bd-9b9b79ab5dfe",
+        "name": "Advance Project Status",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          448,
+          224
+        ],
+        "executeOnce": true,
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "be7a0dda-c4fb-406c-96ad-9acc55d1cddb",
+        "name": "Update Company",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1540,
+          440
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE companies SET domain = COALESCE(NULLIF(($1::jsonb)->>'domain',''), domain), linkedin_url = COALESCE(NULLIF(($1::jsonb)->>'linkedin_url',''), linkedin_url), industry = COALESCE(NULLIF(($1::jsonb)->>'industry',''), industry), hq_location = COALESCE(NULLIF(($1::jsonb)->>'hq_location',''), hq_location), size = COALESCE(NULLIF(($1::jsonb)->>'size',''), size) WHERE name = (($1::jsonb)->>'company') AND role = 'owner'",
+          "options": {
+            "queryReplacement": "={{ JSON.stringify({domain: $json.domain, linkedin_url: $json.linkedin_company_url, industry: $json.industry, hq_location: $json.hq_location, size: $json.size, company: $json.owner_company}) }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "eb923ea0-8e99-4b78-a7b0-4755e9aa6458",
+        "name": "Build Company LinkedIn Queries",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          440
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const items = $input.all();\nconst out = [];\nfor (const it of items) {\n  const p = it.json || {};\n  if (!p.owner_company) continue;\n  const company = String(p.owner_company).trim();\n  if (!company) continue;\n  out.push({ json: {\n    project_id: p.id,\n    owner_company: company,\n    q: '\"' + company + '\" site:linkedin.com/company',\n    num: 3,\n    gl: 'us'\n  } });\n}\nreturn out;"
+        }
+      },
+      {
+        "id": "e45e80c3-a977-4680-b3a6-3b1a2f555cbe",
+        "name": "Serper Company LinkedIn Search",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          660,
+          440
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://google.serper.dev/search",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={ \"q\": {{ JSON.stringify($json.q) }}, \"gl\": {{ JSON.stringify($json.gl) }}, \"num\": {{ $json.num }} }",
+          "options": {
+            "timeout": 15000
+          }
+        }
+      },
+      {
+        "id": "cd062b27-a54f-4614-b909-718965a1a3d7",
+        "name": "Extract Company LinkedIn URL",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          880,
+          440
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const queries = $('Build Company LinkedIn Queries').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const meta = (queries[i] && queries[i].json) ? queries[i].json : {};\n  const organic = (items[i].json && Array.isArray(items[i].json.organic)) ? items[i].json.organic : [];\n  let url = null;\n  for (const o of organic) {\n    if (!o || !o.link) continue;\n    if (/^https?:\\/\\/[a-z]*\\.?linkedin\\.com\\/company\\/[^/?]+/i.test(o.link)) {\n      url = o.link.split(/[?#]/)[0].replace(/\\/$/, '');\n      break;\n    }\n  }\n  if (!url) continue;\n  out.push({ json: {\n    project_id: meta.project_id,\n    owner_company: meta.owner_company,\n    linkedin_company_url: url\n  } });\n}\nreturn out;"
+        }
+      },
+      {
+        "id": "2040b216-03c5-409f-8720-077a4ecd5c11",
+        "name": "Fetch LinkedIn Page",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1100,
+          440
+        ],
+        "parameters": {
+          "method": "GET",
+          "url": "=https://app.scrapingbee.com/api/v1/?api_key={{ $env.SCRAPINGBEE_API_KEY }}&url={{ encodeURIComponent($json.linkedin_company_url) }}&render_js=false",
+          "options": {
+            "timeout": 30000,
+            "response": {
+              "response": {
+                "responseFormat": "text",
+                "outputPropertyName": "html"
+              }
+            }
+          }
+        },
+        "credentials": {}
+      },
+      {
+        "id": "3ee3caea-7a2f-4136-a19e-8c3a245f90c6",
+        "name": "Parse Company From LinkedIn",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1320,
+          440
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const src = $('Extract Company LinkedIn URL').all();\nconst items = $input.all();\n// Short-link aliases used in LinkedIn 'website' field — keep Hunter-compatible canonical domain.\nconst DOMAIN_ALIASES = {\n  'goo.gle': 'google.com',\n  'fb.com': 'facebook.com',\n  'amzn.to': 'amazon.com',\n  'apple.co': 'apple.com'\n};\nconst normalize = (d) => DOMAIN_ALIASES[d] || d;\nconst extractText = (h, marker) => {\n  const re = new RegExp('data-test-id=\"' + marker + '\"[\\\\s\\\\S]{0,800}?<dd[^>]*>([\\\\s\\\\S]{0,500}?)</dd>', 'i');\n  const m = h.match(re);\n  if (!m) return null;\n  const val = m[1].replace(/<[^>]+>/g, '').replace(/\\s+/g, ' ').trim();\n  return val || null;\n};\nconst extractWebsite = (h) => {\n  const m = h.match(/about-us__website[\\s\\S]{0,1500}?(https?:\\/\\/(?!www\\.linkedin\\.com|linkedin\\.com)([\\w-]+(?:\\.[\\w-]+)+))/i);\n  if (!m) return null;\n  return normalize(m[2].toLowerCase().replace(/^www\\./, ''));\n};\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const meta = (src[i] && src[i].json) ? src[i].json : {};\n  const j = items[i].json || {};\n  const html = (typeof j.html === 'string') ? j.html : ((typeof j.data === 'string') ? j.data : '');\n  if (!html) continue;\n  const domain = extractWebsite(html);\n  if (!domain) continue;\n  out.push({ json: {\n    project_id: meta.project_id,\n    owner_company: meta.owner_company,\n    linkedin_company_url: meta.linkedin_company_url,\n    domain: domain,\n    industry: extractText(html, 'about-us__industry'),\n    hq_location: extractText(html, 'about-us__headquarters'),\n    size: extractText(html, 'about-us__size')\n  } });\n}\nreturn out;"
+        }
+      }
+    ],
+    "connections": {
+      "Hourly Schedule": {
+        "main": [
+          [
+            {
+              "node": "Select New Projects",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Select New Projects": {
+        "main": [
+          [
+            {
+              "node": "Build People Queries",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Advance Project Status",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Build Company LinkedIn Queries",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build People Queries": {
+        "main": [
+          [
+            {
+              "node": "Serper People Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Serper People Search": {
+        "main": [
+          [
+            {
+              "node": "Flatten People Results",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Flatten People Results": {
+        "main": [
+          [
+            {
+              "node": "Extract Decision Maker",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Decision Maker": {
+        "main": [
+          [
+            {
+              "node": "Build Enrichment Rows",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI Mini": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Extract Decision Maker",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Enrichment Rows": {
+        "main": [
+          [
+            {
+              "node": "Upsert Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Upsert Lead": {
+        "main": [
+          [
+            {
+              "node": "Log Run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Company LinkedIn Queries": {
+        "main": [
+          [
+            {
+              "node": "Serper Company LinkedIn Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Serper Company LinkedIn Search": {
+        "main": [
+          [
+            {
+              "node": "Extract Company LinkedIn URL",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Company LinkedIn URL": {
+        "main": [
+          [
+            {
+              "node": "Fetch LinkedIn Page",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Fetch LinkedIn Page": {
+        "main": [
+          [
+            {
+              "node": "Parse Company From LinkedIn",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse Company From LinkedIn": {
+        "main": [
+          [
+            {
+              "node": "Update Company",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": true,
+      "binaryMode": "separate"
+    },
+    "staticData": {
+      "node:Hourly Schedule": {
+        "recurrenceRules": []
+      }
+    },
+    "meta": {
+      "aiBuilderAssisted": true,
+      "builderVariant": "mcp"
+    },
+    "pinData": {},
+    "versionId": "da12bb5d-bc17-4b08-8cba-74417a8aca22",
+    "activeVersionId": "c95adc08-8ba6-44d1-b435-5bb3483d9ef6",
+    "versionCounter": 5,
+    "triggerCount": 1,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-05-28T10:25:10.763Z",
+        "createdAt": "2026-05-28T10:25:10.763Z",
+        "role": "workflow:owner",
+        "workflowId": "qmUQ325Fb13iudmJ",
+        "projectId": "e96jozbn85ul708O",
+        "project": {
+          "updatedAt": "2026-05-27T19:07:26.928Z",
+          "createdAt": "2026-05-27T19:01:50.649Z",
+          "id": "e96jozbn85ul708O",
+          "name": "anton zmievsky <anton.zmievsky@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "fec08c2e-8c48-4c09-af8f-7c397ab3734c"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]

@@ -1,0 +1,423 @@
+[
+  {
+    "updatedAt": "2026-05-28T09:41:40.916Z",
+    "createdAt": "2026-05-27T19:21:42.948Z",
+    "id": "NlwH1bTxhlnoZIGp",
+    "name": "01 Ingest — Discover Projects",
+    "description": "Discovers earthworks construction projects via region-parametrized serper.dev queries, extracts fields with an OpenAI mini model, and idempotently upserts them into projects as 'new'. Logs each run.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "triggerAtHour": 6
+              }
+            ]
+          }
+        },
+        "id": "77766f13-3e04-4dcb-ab6d-06fd590f8418",
+        "name": "Daily Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const regions = ($env.TARGET_REGIONS || 'us-west,uk').split(',').map(r => r.trim()).filter(Boolean);\nconst geo = {\n  'us-west': { gl: 'us', location: 'California, United States', label: 'California' },\n  'uk': { gl: 'gb', location: 'United Kingdom', label: 'United Kingdom' }\n};\nconst templates = [\n  '{label} data center construction grading permit 2025..2026',\n  'hyperscaler data center groundbreaking {label} 2026'\n];\nconst out = [];\nfor (const region of regions) {\n  const g = geo[region] || { gl: 'us', location: '', label: region };\n  for (const t of templates) {\n    out.push({ json: { q: t.split('{label}').join(g.label), gl: g.gl, location: g.location, region, source: 'serp.dev', num: 4 } });\n  }\n}\nreturn out;"
+        },
+        "id": "13c6990e-e7c0-48e6-8e5b-ddf26e1f5a56",
+        "name": "Build Discovery Queries",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          224,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://google.serper.dev/search",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={ \"q\": {{ JSON.stringify($json.q) }}, \"gl\": {{ JSON.stringify($json.gl) }}, \"location\": {{ JSON.stringify($json.location) }}, \"num\": {{ $json.num }} }",
+          "options": {
+            "timeout": 15000
+          }
+        },
+        "id": "73f3fe04-930e-445e-94c5-31a6069a05e1",
+        "name": "Serper Search",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          448,
+          0
+        ],
+        "retryOnFail": true,
+        "alwaysOutputData": true,
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "HieSKCvzhYyKGJdB",
+            "name": "Header Auth account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "text": "={{ $json.title }}\n{{ $json.snippet }}\n{{ $json.link }}",
+          "attributes": {
+            "attributes": [
+              {
+                "name": "name",
+                "description": "Name of one specific construction project, if the text is about a named project. Leave empty for generic articles, directories, vendor pages, or market reports."
+              },
+              {
+                "name": "project_type",
+                "description": "Project type, e.g. datacenter, solar, highway, warehouse"
+              },
+              {
+                "name": "owner_company",
+                "description": "Project owner or developer company"
+              },
+              {
+                "name": "gc_company",
+                "description": "General contractor company"
+              },
+              {
+                "name": "earthworks_sub",
+                "description": "Earthworks or grading subcontractor"
+              },
+              {
+                "name": "location_raw",
+                "description": "Free-text location (city, county, state)"
+              },
+              {
+                "name": "state",
+                "description": "US state or country region"
+              },
+              {
+                "name": "county",
+                "description": "County name"
+              },
+              {
+                "name": "est_earthworks_cu_yd",
+                "description": "Estimated earthworks cut/fill volume in cubic yards. Digits only; leave empty if not stated."
+              },
+              {
+                "name": "site_acres",
+                "description": "Site size in acres. Digits only; leave empty if not stated."
+              },
+              {
+                "name": "timeline_stage",
+                "description": "One of: announced, permitting, breaking_ground, under_construction"
+              },
+              {
+                "name": "capex_est",
+                "description": "Estimated capital expenditure in USD. Digits only; leave empty if not stated."
+              }
+            ]
+          },
+          "options": {
+            "batching": {
+              "batchSize": 1,
+              "delayBetweenBatches": 0
+            },
+            "systemPromptTemplate": "You are a precise information extraction algorithm for construction-project data. Extract a field ONLY when it is explicitly stated in the provided text (a web search result: title, snippet, URL). If a value is not clearly present, leave it empty — never infer, guess, or invent company names, locations, or numeric values. If the text is a generic article, directory, market report, vendor page, or is not about one specific named construction project, leave name, owner_company, gc_company and earthworks_sub empty."
+          }
+        },
+        "id": "c2d6f587-f567-4b9f-a2b7-2738b5e8705f",
+        "name": "Extract Project Fields",
+        "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+        "typeVersion": 1.2,
+        "position": [
+          848,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "gpt-5-mini",
+            "cachedResultName": "gpt-5-mini"
+          },
+          "builtInTools": {},
+          "options": {
+            "reasoningEffort": "low",
+            "timeout": 120000,
+            "maxRetries": 3
+          }
+        },
+        "id": "05fb4ca5-46f7-4499-9d80-a8a59658a633",
+        "name": "OpenAI Mini",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          768,
+          256
+        ],
+        "credentials": {
+          "openAiApi": {
+            "id": "LrB9Tqn1l7NgbmUd",
+            "name": "OpenAI account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const src = $('Flatten Results').all();\nconst items = $input.all();\nconst targetRegions = String($env.TARGET_REGIONS || 'us-west,uk').split(',').map(r => r.trim()).filter(Boolean);\nconst num = (v) => { const n = Number(String(v == null ? '' : v).replace(/[^0-9.]/g, '')); return Number.isFinite(n) && n > 0 ? n : null; };\nconst usWest = new Set(['california','ca','nevada','nv','oregon','or','washington','wa','arizona','az','idaho','id','utah','ut','colorado','co','new mexico','nm','montana','mt','wyoming','wy']);\nconst ukNames = ['united kingdom','uk','england','scotland','wales','northern ireland','london','hertfordshire','greater london','manchester','birmingham'];\nconst deriveRegion = (state, location) => {\n  const s = String(state || '').toLowerCase().trim();\n  const loc = String(location || '').toLowerCase();\n  if (usWest.has(s)) return 'us-west';\n  if (ukNames.some(u => s.includes(u) || loc.includes(u))) return 'uk';\n  return null;\n};\nconst stopwords = new Set(['the','and','of','for','at','a','an','data','center','centre','project','phase','park','plant','site','campus','facility','complex','development','i','ii','iii','iv']);\nconst isGrounded = (name, title, snippet) => {\n  if (!name) return false;\n  const text = (String(title||'') + ' ' + String(snippet||'')).toLowerCase();\n  const words = name.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 3 && !stopwords.has(w));\n  if (words.length === 0) return false;\n  return words.some(w => text.includes(w));\n};\nconst rows = [];\nfor (let i = 0; i < items.length; i++) {\n  const j = items[i].json || {};\n  if (j.error) continue;\n  const ex = j.output ? j.output : j;\n  const s = (src[i] && src[i].json) ? src[i].json : {};\n  const link = (s.link || '').trim();\n  const name = (ex.name || '').trim();\n  if (!link || !name) continue;\n  if (!isGrounded(name, s.title, s.snippet)) continue;\n  const region = deriveRegion(ex.state, ex.location_raw);\n  if (!region || !targetRegions.includes(region)) continue;\n  rows.push({ json: {\n    source: s.source || 'serp.dev',\n    source_url: link,\n    dedup_hash: link.toLowerCase(),\n    name: name,\n    project_type: ex.project_type || 'datacenter',\n    description_raw: s.snippet || null,\n    location_raw: ex.location_raw || null,\n    region: region,\n    state: ex.state || null,\n    county: ex.county || null,\n    owner_company: ex.owner_company || null,\n    gc_company: ex.gc_company || null,\n    earthworks_sub: ex.earthworks_sub || null,\n    est_earthworks_cu_yd: num(ex.est_earthworks_cu_yd),\n    site_acres: num(ex.site_acres),\n    timeline_stage: ex.timeline_stage || null,\n    capex_est: num(ex.capex_est),\n    status: 'new'\n  } });\n}\nreturn rows;"
+        },
+        "id": "33a13488-55b3-4c54-b98a-d100a9757e70",
+        "name": "Build Project Row",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1136,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "schema": {
+            "__rl": true,
+            "mode": "list",
+            "value": "public"
+          },
+          "table": {
+            "__rl": true,
+            "mode": "list",
+            "value": "projects"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {},
+            "matchingColumns": [],
+            "schema": [],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": false
+          },
+          "options": {
+            "skipOnConflict": true
+          }
+        },
+        "id": "9f137b88-a6a9-4c99-bcdb-fdfa7f5d3d4e",
+        "name": "Upsert Project",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1328,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO runs (workflow, finished_at, items_out, notes) VALUES ('01_ingest', now(), $1, 'ingest discovery run')",
+          "options": {
+            "queryReplacement": "={{ $(\"Upsert Project\").all().length }}"
+          }
+        },
+        "id": "575b10e7-4d94-4ca9-9182-71a2664b853d",
+        "name": "Log Run",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1552,
+          0
+        ],
+        "executeOnce": true,
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "ffdaabe9-584e-41c2-8c0c-2d815537122f",
+        "name": "Flatten Results",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          672,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const queries = $('Build Discovery Queries').all();\nconst items = $input.all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const meta = (queries[i] && queries[i].json) ? queries[i].json : {};\n  const organic = (items[i].json && Array.isArray(items[i].json.organic)) ? items[i].json.organic : [];\n  for (const o of organic) {\n    if (!o || !o.link) continue;\n    out.push({ json: { title: o.title || '', link: o.link, snippet: o.snippet || '', date: o.date || null, region: meta.region || null, source: meta.source || 'serp.dev', q: meta.q || null } });\n  }\n}\nreturn out;"
+        }
+      }
+    ],
+    "connections": {
+      "Daily Schedule": {
+        "main": [
+          [
+            {
+              "node": "Build Discovery Queries",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Discovery Queries": {
+        "main": [
+          [
+            {
+              "node": "Serper Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Extract Project Fields": {
+        "main": [
+          [
+            {
+              "node": "Build Project Row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI Mini": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Extract Project Fields",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Project Row": {
+        "main": [
+          [
+            {
+              "node": "Upsert Project",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Upsert Project": {
+        "main": [
+          [
+            {
+              "node": "Log Run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Serper Search": {
+        "main": [
+          [
+            {
+              "node": "Flatten Results",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Flatten Results": {
+        "main": [
+          [
+            {
+              "node": "Extract Project Fields",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": true,
+      "binaryMode": "separate"
+    },
+    "staticData": {
+      "node:Daily Schedule": {
+        "recurrenceRules": []
+      }
+    },
+    "meta": {
+      "aiBuilderAssisted": true,
+      "builderVariant": "mcp",
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {
+      "Daily Schedule": [
+        {
+          "json": {
+            "timestamp": "2026-05-27T19:42:53.517+00:00",
+            "Readable date": "May 27th 2026, 7:42:53 pm",
+            "Readable time": "7:42:53 pm",
+            "Day of week": "Wednesday",
+            "Year": "2026",
+            "Month": "May",
+            "Day of month": "27",
+            "Hour": "19",
+            "Minute": "42",
+            "Second": "53",
+            "Timezone": "UTC (UTC+00:00)"
+          },
+          "pairedItem": {
+            "item": 0
+          }
+        }
+      ]
+    },
+    "versionId": "76e3a1bd-54ed-4e78-841e-f81a37391a72",
+    "activeVersionId": "769c7496-8bc7-43a4-8751-8ca587c265cb",
+    "versionCounter": 22,
+    "triggerCount": 1,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-05-27T19:21:42.948Z",
+        "createdAt": "2026-05-27T19:21:42.948Z",
+        "role": "workflow:owner",
+        "workflowId": "NlwH1bTxhlnoZIGp",
+        "projectId": "e96jozbn85ul708O",
+        "project": {
+          "updatedAt": "2026-05-27T19:07:26.928Z",
+          "createdAt": "2026-05-27T19:01:50.649Z",
+          "id": "e96jozbn85ul708O",
+          "name": "anton zmievsky <anton.zmievsky@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "fec08c2e-8c48-4c09-af8f-7c397ab3734c"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]
