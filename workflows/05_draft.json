@@ -1,0 +1,299 @@
+[
+  {
+    "updatedAt": "2026-05-28T13:49:36.826Z",
+    "createdAt": "2026-05-28T13:38:03.603Z",
+    "id": "l90Zbv44jHV0BFXp",
+    "name": "05 Draft Outreach — Email + LinkedIn",
+    "description": "For leads.status='researched', drafts an email + LinkedIn message via Claude Sonnet 4.6 using research_dossier icebreakers and Lumina positioning. Writes 2 outreach rows per lead, advances status to drafted.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours"
+              }
+            ]
+          }
+        },
+        "id": "babea8de-5fa9-4c88-9ab9-b48eccdcd6ba",
+        "name": "Hourly Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT l.id AS lead_id, p.name AS project_name, p.region, p.state, p.timeline_stage, p.project_type, co.name AS company_name, co.domain, co.industry, co.hq_location, co.size AS company_size, c.name AS contact_name, c.title AS contact_title, c.email, l.research_dossier->>'summary' AS research_summary, l.research_dossier->>'recent_news' AS recent_news, l.research_dossier->>'icebreaker_1' AS icebreaker_1, l.research_dossier->>'icebreaker_2' AS icebreaker_2 FROM leads l JOIN projects p ON l.project_id=p.id JOIN companies co ON l.company_id=co.id JOIN contacts c ON l.contact_id=c.id WHERE l.status='researched' AND NOT EXISTS (SELECT 1 FROM outreach o WHERE o.lead_id=l.id) ORDER BY l.fit_score DESC LIMIT 20",
+          "options": {}
+        },
+        "id": "c0a725ce-2bd6-40c9-a0c0-1268950f34d8",
+        "name": "Select Researched Leads",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          224,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst out = [];\nconst fmt = (v) => (v == null || v === '') ? 'unknown' : String(v);\nfor (const it of items) {\n  const r = it.json || {};\n  const text =\n    'RECIPIENT: ' + fmt(r.contact_name) + ' — ' + fmt(r.contact_title) + ' at ' + fmt(r.company_name) + ' (' + fmt(r.company_size) + ', HQ ' + fmt(r.hq_location) + ', industry: ' + fmt(r.industry) + ').\\n' +\n    'PROJECT: ' + fmt(r.project_name) + ' (' + fmt(r.region) + ', ' + fmt(r.state) + '). Type: ' + fmt(r.project_type) + ', stage: ' + fmt(r.timeline_stage) + '.\\n\\n' +\n    'RESEARCH SUMMARY: ' + fmt(r.research_summary) + '\\n' +\n    'RECENT NEWS: ' + fmt(r.recent_news) + '\\n\\n' +\n    'PERSONALIZATION HOOKS (use one verbatim or near-verbatim as the opener — do not invent a new one):\\n' +\n    '- Hook 1: ' + fmt(r.icebreaker_1) + '\\n' +\n    '- Hook 2: ' + fmt(r.icebreaker_2) + '\\n\\n' +\n    'Write the email and the LinkedIn variant per the system rules.';\n  out.push({ json: { lead_id: r.lead_id, input_text: text } });\n}\nreturn out;"
+        },
+        "id": "b641cea9-e164-4a1f-acb5-5c78142c565a",
+        "name": "Build Draft Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          448,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "text": "={{ $json.input_text }}",
+          "schemaType": "fromJson",
+          "jsonSchemaExample": "{ \"email\": { \"subject\": \"Quick question on mass-grading at Second London\", \"body\": \"Hi David,\\n\\nFor London campuses with tight footprints and deep excavations...\\n\\nCould we grab 15 minutes next week?\\n\\nBest,\\nLumina team\" }, \"linkedin\": { \"body\": \"Hi David — saw the Second London campus is moving forward. Lumina self-performs mass excavation with autonomous electric dozers (~50% lower per-cu-yd than a D9). Worth a 15-min chat?\" } }",
+          "options": {
+            "systemPromptTemplate": "You write concise, specific B2B outreach on behalf of Lumina to construction decision-makers. Lumina self-performs excavation with a 32-ton autonomous electric dozer (Moonlander ML6): ~50% lower cost per cubic yard than a diesel D9, zero emissions, teleoperated/autonomous operation that removes people from hazardous earthmoving.\n\nRules (mandatory):\n- Use ONE of the provided personalization hooks verbatim or near-verbatim as the opener. Never invent a new hook. If both hooks are weak, pick the less generic one and tighten the wording.\n- Lead with the recipient\\u2019s problem (cost / timeline / emissions / safety of mass grading) before introducing Lumina.\n- Email body: 90\\u2013130 words. One subject line under 60 chars, no clickbait. One clear ask: a 15-minute call.\n- LinkedIn variant: 30\\u201360 words, no subject, single message.\n- Address the recipient by first name (split on space, take first token, ignore certificates like AIA / PE / LEED).\n- Sign-off: \"Best,\\nLumina team\" (placeholder \\u2014 a human will personalize before send).\n- No hype, no exclamation marks, no \"hope this finds you well\", no buzzwords (\"synergy\", \"leverage\", \"revolutionary\"). Sound like an operator who has done earthworks themselves, not a marketer.\n- If RECENT NEWS or RESEARCH SUMMARY contradict the hook, prefer the hook (the research is what the salesperson grounds in).\n\nReturn JSON only. No prose outside the JSON.",
+            "batching": {
+              "batchSize": 1,
+              "delayBetweenBatches": 0
+            }
+          }
+        },
+        "id": "a836e3ba-1172-48da-9f47-dfac83d23116",
+        "name": "Draft Outreach",
+        "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+        "typeVersion": 1.2,
+        "position": [
+          640,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "value": "claude-haiku-4-5-20251001",
+            "mode": "list",
+            "cachedResultName": "Claude Haiku 4.5"
+          },
+          "options": {
+            "maxTokensToSample": 1200,
+            "temperature": 0.5
+          }
+        },
+        "id": "e72c125a-02dc-4975-9747-ab6abe517242",
+        "name": "Claude Sonnet 4.6",
+        "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+        "typeVersion": 1.5,
+        "position": [
+          672,
+          224
+        ],
+        "credentials": {
+          "anthropicApi": {
+            "id": "Gw8PP7iQOKuSyzrt",
+            "name": "Anthropic account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst inputs = $('Build Draft Input').all();\nconst selected = $('Select Researched Leads').all();\nconst out = [];\nfor (let i = 0; i < items.length; i++) {\n  const j = items[i].json || {};\n  const ex = (j.output && typeof j.output === 'object') ? j.output : (typeof j === 'object' ? j : {});\n  const base = (inputs[i] && inputs[i].json) ? inputs[i].json : {};\n  const sel = (selected[i] && selected[i].json) ? selected[i].json : {};\n  const email = (ex.email && typeof ex.email === 'object') ? ex.email : null;\n  const linkedin = (ex.linkedin && typeof ex.linkedin === 'object') ? ex.linkedin : null;\n  if (!email && !linkedin) continue;\n  out.push({ json: {\n    lead_id: base.lead_id,\n    email: email,\n    linkedin: linkedin,\n    personalization_hooks: {\n      icebreaker_1: sel.icebreaker_1 || null,\n      icebreaker_2: sel.icebreaker_2 || null\n    }\n  } });\n}\nreturn out;"
+        },
+        "id": "35795f00-abe8-48b6-ac81-30d91b318c6f",
+        "name": "Build Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          944,
+          16
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "WITH input AS (SELECT ($1::jsonb) AS d), em AS (INSERT INTO outreach (lead_id, channel, subject, body, personalization_hooks, sequence_step) SELECT ((d->>'lead_id')::bigint), 'email', (d#>>'{email,subject}'), (d#>>'{email,body}'), (d->'personalization_hooks'), 0 FROM input WHERE (d#>>'{email,body}') IS NOT NULL AND (d#>>'{email,body}') <> '' RETURNING id), li AS (INSERT INTO outreach (lead_id, channel, subject, body, personalization_hooks, sequence_step) SELECT ((d->>'lead_id')::bigint), 'linkedin', NULL, (d#>>'{linkedin,body}'), (d->'personalization_hooks'), 0 FROM input WHERE (d#>>'{linkedin,body}') IS NOT NULL AND (d#>>'{linkedin,body}') <> '' RETURNING id) UPDATE leads SET status = 'drafted'::lead_status, updated_at = now() WHERE id = ((($1::jsonb)->>'lead_id')::bigint) RETURNING id, status",
+          "options": {
+            "queryReplacement": "={{ JSON.stringify($json) }}"
+          }
+        },
+        "id": "fde1deb3-0808-42fa-b2b6-cdcd49e638ba",
+        "name": "Apply Drafts",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1104,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO runs (workflow, finished_at, items_out, notes) VALUES ('05_draft', now(), $1, 'draft outreach run')",
+          "options": {
+            "queryReplacement": "={{ $(\"Apply Drafts\").all().length }}"
+          }
+        },
+        "id": "0e6a7bab-3c18-40e2-abd8-bf2fa7a34a99",
+        "name": "Log Run",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1328,
+          0
+        ],
+        "executeOnce": true,
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Hourly Schedule": {
+        "main": [
+          [
+            {
+              "node": "Select Researched Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Select Researched Leads": {
+        "main": [
+          [
+            {
+              "node": "Build Draft Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Draft Input": {
+        "main": [
+          [
+            {
+              "node": "Draft Outreach",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Draft Outreach": {
+        "main": [
+          [
+            {
+              "node": "Build Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude Sonnet 4.6": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Draft Outreach",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Payload": {
+        "main": [
+          [
+            {
+              "node": "Apply Drafts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Apply Drafts": {
+        "main": [
+          [
+            {
+              "node": "Log Run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": true,
+      "binaryMode": "separate"
+    },
+    "staticData": {
+      "node:Hourly Schedule": {
+        "recurrenceRules": []
+      }
+    },
+    "meta": {
+      "aiBuilderAssisted": true,
+      "builderVariant": "mcp",
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "versionId": "c248ae79-5881-4a08-92f6-fd491395d530",
+    "activeVersionId": "ca2a7e8e-1ffe-4292-96bc-f12967039978",
+    "versionCounter": 5,
+    "triggerCount": 1,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-05-28T13:38:03.603Z",
+        "createdAt": "2026-05-28T13:38:03.603Z",
+        "role": "workflow:owner",
+        "workflowId": "l90Zbv44jHV0BFXp",
+        "projectId": "e96jozbn85ul708O",
+        "project": {
+          "updatedAt": "2026-05-27T19:07:26.928Z",
+          "createdAt": "2026-05-27T19:01:50.649Z",
+          "id": "e96jozbn85ul708O",
+          "name": "anton zmievsky <anton.zmievsky@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "fec08c2e-8c48-4c09-af8f-7c397ab3734c"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]
