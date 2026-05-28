@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import workflowsMeta from './workflows-meta.json';
 
 // ----------------------------------------------------------------------------
 // Types matching the /api/state payload (returned by n8n workflow `99 API`)
@@ -71,6 +72,23 @@ type Run = {
   finished_at: string;
   items_out: number;
 };
+
+type WorkflowMetaNode = {
+  name: string;
+  kind: string;
+  label: string;
+  attached: { name: string; kind: string; label: string }[];
+};
+
+type WorkflowMeta = {
+  file: string;
+  name: string;
+  description: string | null;
+  nodeCount: number;
+  nodes: WorkflowMetaNode[];
+};
+
+const WORKFLOWS = workflowsMeta as Record<string, WorkflowMeta>;
 
 type State = {
   stats: Stats;
@@ -476,11 +494,26 @@ export default function App() {
         </Section>
       )}
 
+      {/* WORKFLOW INTERNALS — auto-generated from workflows/*.json ----------- */}
+      <Section label="workflow internals (auto-derived from the JSON in /workflows)">
+        <p className="text-[12px] text-muted mb-4">
+          The node graph of each n8n workflow, generated at build time from the same files that are checked into the
+          repo. <span className="text-ink">Single source of truth</span> — the live workflow can't drift from this view.
+          The n8n canvas itself is owner-only; live walkthrough is available on a screen-share call.
+        </p>
+        <div className="space-y-3">
+          {Object.entries(WORKFLOWS).map(([slug, wf]) => (
+            <WorkflowCard key={slug} slug={slug} wf={wf} />
+          ))}
+        </div>
+      </Section>
+
       {/* TRY THE HITL FORM --------------------------------------------------- */}
       <Section label="try the human approval gate">
         <p className="text-[12px]">
-          Stage 06 is a live form. Pick a draft from the table above with status <code>drafted</code> (e.g. lead id 11
-          for Kevin Antonelli @ Google, score 81) and decide for yourself.
+          Stage 06 exposes a public form (no n8n login needed). Pick a draft from the leads table above with status{' '}
+          <code>drafted</code> (e.g. lead id 11 — Kevin Antonelli @ Google, score 81) and decide for yourself —
+          approve or reject. Decisions stamp the database in real time and you'll see them reflected on next refresh.
         </p>
         <a
           href="https://n8n.revops.it.com/form/approve-lead"
@@ -526,14 +559,17 @@ export default function App() {
       <footer className="border-t border-line mt-12 pt-6 pb-12 text-[11px] text-muted">
         <div className="grid sm:grid-cols-3 gap-4">
           <div>
-            <div className="uppercase tracking-widest text-[10px] mb-1">drill-in</div>
-            <div><a href="https://n8n.revops.it.com/" target="_blank" rel="noreferrer">live n8n workflows ↗</a></div>
+            <div className="uppercase tracking-widest text-[10px] mb-1">try it</div>
             <div><a href="https://n8n.revops.it.com/form/approve-lead" target="_blank" rel="noreferrer">approval form ↗</a></div>
+            <div className="text-muted/80 text-[10px] mt-1">
+              (n8n canvas is owner-only; live walkthrough available on call)
+            </div>
           </div>
           <div>
-            <div className="uppercase tracking-widest text-[10px] mb-1">code</div>
+            <div className="uppercase tracking-widest text-[10px] mb-1">source code</div>
             <div><a href="https://github.com/zmiievskyi/groundbreaker" target="_blank" rel="noreferrer">github.com/zmiievskyi/groundbreaker ↗</a></div>
             <div><a href="https://github.com/zmiievskyi/groundbreaker/blob/main/README.md" target="_blank" rel="noreferrer">README ↗</a></div>
+            <div><a href="https://github.com/zmiievskyi/groundbreaker/tree/main/workflows" target="_blank" rel="noreferrer">workflow JSONs ↗</a></div>
             <div><a href="https://github.com/zmiievskyi/groundbreaker/blob/main/docs/demo.md" target="_blank" rel="noreferrer">demo doc ↗</a></div>
           </div>
           <div>
@@ -555,4 +591,81 @@ function Row({ k, v }: { k: string; v: React.ReactNode }) {
       <div>{v}</div>
     </div>
   );
+}
+
+// Workflow card — collapsible breakdown of every n8n node, auto-derived from
+// the workflow JSON at build time. The kind tag is colour-coded by category
+// (trigger / ai / db / http / code / ...) using only the surrounding monospace
+// palette — no icons.
+function WorkflowCard({ slug, wf }: { slug: string; wf: WorkflowMeta }) {
+  const [open, setOpen] = useState(false);
+  const isOos = slug.startsWith('07') || slug.startsWith('08'); // never true today, kept for clarity
+  return (
+    <div className="border border-line bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-neutral-50"
+      >
+        <div className="flex items-baseline gap-3">
+          <span className="text-muted text-[11px]">{slug}.json</span>
+          <span className="tracking-wider">{wf.name}</span>
+          <span className="text-muted text-[10px]">{wf.nodeCount} nodes</span>
+          {isOos && <span className="text-[10px] text-muted">— out of scope</span>}
+        </div>
+        <span className="text-muted text-[11px]">{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 border-t border-line">
+          {wf.description && (
+            <p className="text-[11px] text-muted py-3 border-b border-line/60 mb-3">{wf.description}</p>
+          )}
+          <ol className="font-mono text-[12px] space-y-1">
+            {wf.nodes.map((n, i) => (
+              <li key={n.name}>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-muted text-[10px] tabular-nums w-4 inline-block text-right">
+                    {i === 0 ? '◆' : '↓'}
+                  </span>
+                  <span>{n.name}</span>
+                  <KindTag kind={n.kind} label={n.label} />
+                </div>
+                {n.attached.length > 0 && (
+                  <ul className="ml-6 mt-0.5 mb-1 text-[11px] text-muted">
+                    {n.attached.map((s) => (
+                      <li key={s.name} className="flex items-baseline gap-2">
+                        <span className="text-[10px]">└</span>
+                        <span>{s.name}</span>
+                        <span className="text-[10px]">[{s.label} · subnode]</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ol>
+          <div className="text-[10px] text-muted mt-3">
+            source: <code>workflows/{wf.file}</code>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KindTag({ kind, label }: { kind: string; label: string }) {
+  const palette: Record<string, string> = {
+    trigger:   'border-line text-muted',
+    ai:        'border-accent text-accent',
+    'ai-model':'border-accent text-accent',
+    db:        'border-line text-ink',
+    http:      'border-line text-ink',
+    code:      'border-line text-muted',
+    transform: 'border-line text-muted',
+    respond:   'border-line text-muted',
+    control:   'border-line text-muted',
+    node:      'border-line text-muted',
+  };
+  const cls = palette[kind] ?? palette.node;
+  return <span className={`border ${cls} px-1 text-[10px] tracking-wide`}>{label}</span>;
 }

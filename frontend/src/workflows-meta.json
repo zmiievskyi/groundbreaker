@@ -1,0 +1,394 @@
+{
+  "01_ingest": {
+    "file": "01_ingest.json",
+    "name": "01 Ingest — Discover Projects",
+    "description": "Discovers earthworks construction projects via region-parametrized serper.dev queries, extracts fields with an OpenAI mini model, and idempotently upserts them into projects as 'new'. Logs each run.",
+    "nodeCount": 9,
+    "nodes": [
+      {
+        "name": "Daily Schedule",
+        "kind": "trigger",
+        "label": "cron trigger",
+        "attached": []
+      },
+      {
+        "name": "Build Discovery Queries",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Serper Search",
+        "kind": "http",
+        "label": "http request",
+        "attached": []
+      },
+      {
+        "name": "Flatten Results",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Extract Project Fields",
+        "kind": "ai",
+        "label": "information extractor",
+        "attached": [
+          {
+            "name": "OpenAI Mini",
+            "kind": "ai-model",
+            "label": "OpenAI chat"
+          }
+        ]
+      },
+      {
+        "name": "Build Project Row",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Upsert Project",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Log Run",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      }
+    ]
+  },
+  "02_enrich": {
+    "file": "02_enrich.json",
+    "name": "02 Enrich — Decision-Makers",
+    "description": "For projects.status='new', searches LinkedIn via serper for decision-makers, extracts name/title with OpenAI mini, upserts companies/contacts/leads, advances project status to enriched. No Hunter.",
+    "nodeCount": 17,
+    "nodes": [
+      {
+        "name": "Hourly Schedule",
+        "kind": "trigger",
+        "label": "cron trigger",
+        "attached": []
+      },
+      {
+        "name": "Select New Projects",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Build Company LinkedIn Queries",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Build People Queries",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Advance Project Status",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Serper Company LinkedIn Search",
+        "kind": "http",
+        "label": "http request",
+        "attached": []
+      },
+      {
+        "name": "Serper People Search",
+        "kind": "http",
+        "label": "http request",
+        "attached": []
+      },
+      {
+        "name": "Flatten People Results",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Extract Company LinkedIn URL",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Fetch LinkedIn Page",
+        "kind": "http",
+        "label": "http request",
+        "attached": []
+      },
+      {
+        "name": "Extract Decision Maker",
+        "kind": "ai",
+        "label": "information extractor",
+        "attached": [
+          {
+            "name": "OpenAI Mini",
+            "kind": "ai-model",
+            "label": "OpenAI chat"
+          }
+        ]
+      },
+      {
+        "name": "Parse Company From LinkedIn",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Build Enrichment Rows",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Update Company",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Upsert Lead",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Log Run",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      }
+    ]
+  },
+  "03_score": {
+    "file": "03_score.json",
+    "name": "03 Score — Fit Scoring",
+    "description": "Scores enriched leads via OpenAI mini with structured output (fit_score 0-100, per-dimension breakdown, 1-2 sentence reason). Advances leads.status to scored. No external sends.",
+    "nodeCount": 7,
+    "nodes": [
+      {
+        "name": "Hourly Schedule",
+        "kind": "trigger",
+        "label": "cron trigger",
+        "attached": []
+      },
+      {
+        "name": "Select Enriched Leads",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Build Score Input",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Score Lead",
+        "kind": "ai",
+        "label": "information extractor",
+        "attached": [
+          {
+            "name": "OpenAI Mini",
+            "kind": "ai-model",
+            "label": "OpenAI chat"
+          }
+        ]
+      },
+      {
+        "name": "Update Lead Score",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Log Run",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      }
+    ]
+  },
+  "04_research": {
+    "file": "04_research.json",
+    "name": "04 Deep Research + Hunter",
+    "description": "For top-scored leads (fit_score >= MIN_FIT_SCORE), runs web-grounded research via OpenAI mini Responses API + builtin webSearch, finds emails via Hunter, writes dossier + email + advances status to researched.",
+    "nodeCount": 9,
+    "nodes": [
+      {
+        "name": "Hourly Schedule",
+        "kind": "trigger",
+        "label": "cron trigger",
+        "attached": []
+      },
+      {
+        "name": "Select Top-Scored Leads",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Build Research Input",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Research Lead",
+        "kind": "ai",
+        "label": "information extractor",
+        "attached": [
+          {
+            "name": "OpenAI Mini + Web Search",
+            "kind": "ai-model",
+            "label": "OpenAI chat"
+          }
+        ]
+      },
+      {
+        "name": "Hunter Email Finder",
+        "kind": "http",
+        "label": "http request",
+        "attached": []
+      },
+      {
+        "name": "Build Payload",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Apply Research + Email",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Log Run",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      }
+    ]
+  },
+  "05_draft": {
+    "file": "05_draft.json",
+    "name": "05 Draft Outreach — Email + LinkedIn",
+    "description": "For leads.status='researched', drafts an email + LinkedIn message via Claude Sonnet 4.6 using research_dossier icebreakers and Lumina positioning. Writes 2 outreach rows per lead, advances status to drafted.",
+    "nodeCount": 8,
+    "nodes": [
+      {
+        "name": "Hourly Schedule",
+        "kind": "trigger",
+        "label": "cron trigger",
+        "attached": []
+      },
+      {
+        "name": "Select Researched Leads",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Build Draft Input",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Draft Outreach",
+        "kind": "ai",
+        "label": "information extractor",
+        "attached": [
+          {
+            "name": "Claude Sonnet 4.6",
+            "kind": "ai-model",
+            "label": "Anthropic chat"
+          }
+        ]
+      },
+      {
+        "name": "Build Payload",
+        "kind": "code",
+        "label": "code",
+        "attached": []
+      },
+      {
+        "name": "Apply Drafts",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Log Run",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      }
+    ]
+  },
+  "06_approve": {
+    "file": "06_approve.json",
+    "name": "06 Approve — Human Gate",
+    "description": "Human-in-the-loop approval gate. Form Trigger workflow exposes a public URL; reviewer enters lead_id + decision (approve/reject) + approver name. On approve, stamps outreach rows and advances leads.status; on reject, sets rejected.",
+    "nodeCount": 3,
+    "nodes": [
+      {
+        "name": "Approval Form",
+        "kind": "trigger",
+        "label": "form trigger",
+        "attached": []
+      },
+      {
+        "name": "Apply Decision",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Log Run",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      }
+    ]
+  },
+  "99_api": {
+    "file": "99_api.json",
+    "name": "99 API — read-only state for dashboard",
+    "description": "Read-only API endpoint that aggregates pipeline state (stats, projects, leads, featured approved lead with dossier+drafts, recent runs) into one JSON blob for the React dashboard. Single Postgres aggregate query.",
+    "nodeCount": 3,
+    "nodes": [
+      {
+        "name": "API Webhook",
+        "kind": "trigger",
+        "label": "webhook trigger",
+        "attached": []
+      },
+      {
+        "name": "Query State",
+        "kind": "db",
+        "label": "postgres",
+        "attached": []
+      },
+      {
+        "name": "Respond",
+        "kind": "respond",
+        "label": "respond",
+        "attached": []
+      }
+    ]
+  }
+}
