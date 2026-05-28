@@ -1,0 +1,273 @@
+[
+  {
+    "updatedAt": "2026-05-28T12:13:13.043Z",
+    "createdAt": "2026-05-28T12:05:58.940Z",
+    "id": "7NmMkKnlKrVVW03Z",
+    "name": "03 Score — Fit Scoring",
+    "description": "Scores enriched leads via OpenAI mini with structured output (fit_score 0-100, per-dimension breakdown, 1-2 sentence reason). Advances leads.status to scored. No external sends.",
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+      {
+        "id": "133198cb-47b1-46e0-919d-82c076a77cda",
+        "name": "Hourly Schedule",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "hoursInterval": 1
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "dcde0217-c021-47aa-9e9c-8335dff5f17d",
+        "name": "Select Enriched Leads",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          220,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT l.id AS lead_id, p.id AS project_id, p.name AS project_name, p.region, p.project_type, p.state, p.timeline_stage, p.est_earthworks_cu_yd, p.site_acres, p.capex_est, p.owner_company, co.name AS company_name, co.industry, co.hq_location, co.size AS company_size, c.name AS contact_name, c.title AS contact_title, c.persona FROM leads l JOIN projects p ON l.project_id=p.id JOIN companies co ON l.company_id=co.id JOIN contacts c ON l.contact_id=c.id WHERE l.status = 'enriched' ORDER BY l.id LIMIT 50",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "75356ec4-a5ae-45cc-95ba-48cfc14b696b",
+        "name": "Build Score Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          440,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const items = $input.all();\nconst out = [];\nconst fmt = (v) => (v == null || v === '') ? 'unknown' : String(v);\nfor (const it of items) {\n  const r = it.json || {};\n  const text =\n    'Project: ' + fmt(r.project_name) + '\\n' +\n    'Type: ' + fmt(r.project_type) + ', region=' + fmt(r.region) + ', state=' + fmt(r.state) + ', stage=' + fmt(r.timeline_stage) + '\\n' +\n    'Earthworks: ' + fmt(r.est_earthworks_cu_yd) + ' cubic yards, site acres=' + fmt(r.site_acres) + ', capex=' + fmt(r.capex_est) + ' USD\\n' +\n    'Owner company: ' + fmt(r.owner_company) + ' (industry=' + fmt(r.industry) + ', HQ=' + fmt(r.hq_location) + ', size=' + fmt(r.company_size) + ')\\n' +\n    'Contact: ' + fmt(r.contact_name) + ' - ' + fmt(r.contact_title) + ' (persona=' + fmt(r.persona) + ')';\n  out.push({ json: { lead_id: r.lead_id, input_text: text } });\n}\nreturn out;"
+        }
+      },
+      {
+        "id": "a20f3cbb-69e6-4c23-b48a-01aee51100b2",
+        "name": "Score Lead",
+        "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+        "typeVersion": 1.2,
+        "position": [
+          660,
+          0
+        ],
+        "parameters": {
+          "text": "={{ $json.input_text }}",
+          "schemaType": "fromJson",
+          "jsonSchemaExample": "{ \"fit_score\": 85, \"score_breakdown\": { \"region\": 100, \"earthworks_volume\": 50, \"project_type\": 100, \"timeline_urgency\": 70, \"persona_fit\": 100, \"company_scale\": 90 }, \"score_reason\": \"Real UK data center project; VP Construction at hyperscale owner is the right decision-maker. Earthworks volume not specified, capped.\" }",
+          "options": {
+            "systemPromptTemplate": "You score a B2B sales lead 0-100 for Lumina, a startup that self-performs excavation/earthworks for grading-heavy construction projects (data centers first), operating in CA/US-West and UK.\n\nScore each dimension 0-100 from the lead text:\n- region: 100 if us-west or uk, 0 otherwise (leads outside are already filtered upstream)\n- earthworks_volume: more cubic yards = higher (>500k -> 90+, 100k-500k -> 60-90, <100k -> 30-60, unknown -> 50)\n- project_type: datacenter -> 100, solar/highway/warehouse -> 80, other -> 50\n- timeline_urgency: under_construction -> 100, breaking_ground -> 90, permitting -> 70, announced -> 40, unknown -> 50\n- persona_fit: gc_project_exec -> 100, site_dev_mgr -> 90, earthworks_sub -> 80, owners_rep -> 70, null/unclassified -> 30\n- company_scale: 1k-5k employees -> 90, 51-200 -> 70, 11-50 -> 60, unknown -> 50\n\nfit_score is your weighted overall (0-100) — judgment call on weights, but earthworks_volume and persona_fit are the strongest signals for excavation service fit.\n\nscore_reason: 1-2 sentences naming the top 2 drivers (positive or negative). No filler.",
+            "batching": {
+              "batchSize": 1,
+              "delayBetweenBatches": 0
+            }
+          }
+        }
+      },
+      {
+        "id": "1536b84b-cf1b-4c52-adb2-dccf302dfd3c",
+        "name": "OpenAI Mini",
+        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+        "typeVersion": 1.3,
+        "position": [
+          660,
+          220
+        ],
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "gpt-5-mini",
+            "cachedResultName": "gpt-5-mini"
+          },
+          "options": {
+            "timeout": 120000,
+            "maxRetries": 3,
+            "reasoningEffort": "low"
+          }
+        },
+        "credentials": {
+          "openAiApi": {
+            "id": "LrB9Tqn1l7NgbmUd",
+            "name": "OpenAI account"
+          }
+        }
+      },
+      {
+        "id": "03f4481d-c143-4505-ab79-0a7b0ceee0a2",
+        "name": "Update Lead Score",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          880,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE leads SET fit_score = round((($1::jsonb)->>'fit_score')::numeric)::integer, score_breakdown = ($1::jsonb)->'score_breakdown', score_reason = ($1::jsonb)->>'score_reason', status = 'scored'::lead_status, updated_at = now() WHERE id = (($1::jsonb)->>'lead_id')::bigint RETURNING id, fit_score",
+          "options": {
+            "queryReplacement": "={{ JSON.stringify({fit_score: ($json.output ? $json.output.fit_score : $json.fit_score), score_breakdown: ($json.output ? $json.output.score_breakdown : $json.score_breakdown), score_reason: ($json.output ? $json.output.score_reason : $json.score_reason), lead_id: $(\"Build Score Input\").item.json.lead_id}) }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "a97e7fcb-ef70-4b17-9d50-437307ef2aed",
+        "name": "Log Run",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [
+          1100,
+          0
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO runs (workflow, finished_at, items_out, notes) VALUES ('03_score', now(), $1, 'score run')",
+          "options": {
+            "queryReplacement": "={{ $(\"Update Lead Score\").all().length }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        },
+        "executeOnce": true
+      }
+    ],
+    "connections": {
+      "Hourly Schedule": {
+        "main": [
+          [
+            {
+              "node": "Select Enriched Leads",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Select Enriched Leads": {
+        "main": [
+          [
+            {
+              "node": "Build Score Input",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Score Input": {
+        "main": [
+          [
+            {
+              "node": "Score Lead",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Score Lead": {
+        "main": [
+          [
+            {
+              "node": "Update Lead Score",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "OpenAI Mini": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "Score Lead",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Update Lead Score": {
+        "main": [
+          [
+            {
+              "node": "Log Run",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": true
+    },
+    "staticData": null,
+    "meta": {
+      "aiBuilderAssisted": true,
+      "builderVariant": "mcp"
+    },
+    "pinData": null,
+    "versionId": "d73f6f76-6bf6-48eb-aee3-b07af35c35d8",
+    "activeVersionId": null,
+    "versionCounter": 2,
+    "triggerCount": 0,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-05-28T12:05:58.940Z",
+        "createdAt": "2026-05-28T12:05:58.940Z",
+        "role": "workflow:owner",
+        "workflowId": "7NmMkKnlKrVVW03Z",
+        "projectId": "e96jozbn85ul708O",
+        "project": {
+          "updatedAt": "2026-05-27T19:07:26.928Z",
+          "createdAt": "2026-05-27T19:01:50.649Z",
+          "id": "e96jozbn85ul708O",
+          "name": "anton zmievsky <anton.zmievsky@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "creatorId": "fec08c2e-8c48-4c09-af8f-7c397ab3734c"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]
