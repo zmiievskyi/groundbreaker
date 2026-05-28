@@ -1,0 +1,53 @@
+# groundbreaker — Caddy reverse proxy
+#
+# Serves the React dashboard on groundbreaker.revops.it.com and proxies n8n on
+# n8n.revops.it.com behind a single basic-auth gate. Cloudflare terminates TLS
+# at the edge and forwards plain HTTP through the tunnel to Caddy on :80, so
+# auto_https is disabled here.
+#
+# The /api path on groundbreaker.* rewrites to /webhook so the React app can
+# fetch live state from the `99 API` workflow without exposing /webhook itself.
+# Both site blocks inject n8n's own basic-auth header upstream so users only see
+# one auth prompt.
+
+{
+  auto_https off
+  admin off
+}
+
+http://groundbreaker.revops.it.com {
+  # Bcrypt hash inlined — it's one-way, the password (given to HR) is the secret.
+  # The username comes from env so it can be rotated without editing the Caddyfile.
+  basic_auth * {
+    {$BASIC_AUTH_USER} $2a$14$xdV6AQ24Uo6atrZrAZjrPOy8ajDeIjg4a.cciCgncvhi6fKNVq8WG
+  }
+
+  # React dashboard → n8n webhook
+  handle /api/* {
+    rewrite * /webhook{uri}
+    reverse_proxy http://n8n:5678 {
+      header_up Authorization "Basic {$N8N_INTERNAL_AUTH}"
+    }
+  }
+
+  # static frontend (SPA fallback to /index.html)
+  handle {
+    root * /srv
+    try_files {path} /index.html
+    file_server
+  }
+
+  encode gzip
+}
+
+http://n8n.revops.it.com {
+  basic_auth * {
+    {$BASIC_AUTH_USER} $2a$14$xdV6AQ24Uo6atrZrAZjrPOy8ajDeIjg4a.cciCgncvhi6fKNVq8WG
+  }
+
+  reverse_proxy http://n8n:5678 {
+    header_up Authorization "Basic {$N8N_INTERNAL_AUTH}"
+  }
+
+  encode gzip
+}

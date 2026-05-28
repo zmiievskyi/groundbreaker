@@ -1,0 +1,84 @@
+[
+  {
+    "createdAt": "2026-05-28T14:50:53.650Z",
+    "updatedAt": "2026-05-28T14:50:53.650Z",
+    "id": "G4rrE0jzRUWISwKR",
+    "name": "99 API — read-only state for dashboard",
+    "description": "Read-only API endpoint that aggregates pipeline state (stats, projects, leads, featured approved lead with dossier+drafts, recent runs) into one JSON blob for the React dashboard. Single Postgres aggregate query.",
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "id": "02a1e267-9a09-4e34-84f4-9fcd3c3e9157",
+        "name": "API Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [0, 0],
+        "parameters": {
+          "httpMethod": "GET",
+          "path": "api/state",
+          "responseMode": "responseNode",
+          "options": {
+            "allowedOrigins": "*"
+          }
+        },
+        "webhookId": "ff11b71f-ba1a-4eda-9514-9b5050096374"
+      },
+      {
+        "id": "07514df7-3613-42f7-9b8b-6cdcb5d4cf93",
+        "name": "Query State",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.6,
+        "position": [224, 0],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT json_build_object(\n  'stats', json_build_object(\n    'projects', (SELECT count(*) FROM projects),\n    'companies', (SELECT count(*) FROM companies),\n    'contacts', (SELECT count(*) FROM contacts),\n    'contacts_with_email', (SELECT count(*) FROM contacts WHERE email IS NOT NULL),\n    'leads', (SELECT count(*) FROM leads),\n    'researched', (SELECT count(*) FROM leads WHERE researched_at IS NOT NULL),\n    'drafted', (SELECT count(*) FROM leads WHERE status::text IN ('drafted','approved','rejected')),\n    'approved', (SELECT count(*) FROM leads WHERE status = 'approved'),\n    'rejected', (SELECT count(*) FROM leads WHERE status = 'rejected'),\n    'outreach', (SELECT count(*) FROM outreach),\n    'runs', (SELECT count(*) FROM runs)\n  ),\n  'projects', (\n    SELECT json_agg(json_build_object(\n      'id', id, 'name', name, 'owner', owner_company,\n      'region', region, 'state', state, 'source_url', source_url\n    ) ORDER BY id) FROM projects\n  ),\n  'leads', (\n    SELECT json_agg(json_build_object(\n      'id', l.id, 'contact', c.name, 'title', c.title, 'persona', c.persona,\n      'company', co.name, 'domain', co.domain, 'email', c.email,\n      'project', p.name, 'fit_score', l.fit_score, 'score_reason', l.score_reason,\n      'status', l.status\n    ) ORDER BY l.fit_score DESC NULLS LAST)\n    FROM leads l\n    JOIN contacts c ON l.contact_id=c.id\n    JOIN companies co ON l.company_id=co.id\n    JOIN projects p ON l.project_id=p.id\n  ),\n  'featured_lead', (\n    SELECT json_build_object(\n      'id', l.id, 'contact', c.name, 'title', c.title, 'company', co.name,\n      'project', p.name, 'fit_score', l.fit_score, 'research_dossier', l.research_dossier,\n      'drafts', (SELECT json_agg(json_build_object(\n          'channel', o.channel, 'subject', o.subject, 'body', o.body, 'approved_by', o.approved_by\n        )) FROM outreach o WHERE o.lead_id = l.id)\n    )\n    FROM leads l\n    JOIN contacts c ON l.contact_id=c.id\n    JOIN companies co ON l.company_id=co.id\n    JOIN projects p ON l.project_id=p.id\n    WHERE l.status = 'approved' LIMIT 1\n  ),\n  'recent_runs', (\n    SELECT json_agg(row_to_json(r))\n    FROM (SELECT id, workflow, finished_at, items_out FROM runs ORDER BY id DESC LIMIT 10) r\n  )\n) AS state",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "SU09btyjZsKa0gvr",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "id": "f432ef59-3bd2-4cb0-8c67-cf773257a80b",
+        "name": "Respond",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [448, 0],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json.state }}",
+          "options": {
+            "responseCode": 200,
+            "responseHeaders": {
+              "entries": [
+                { "name": "Content-Type", "value": "application/json" },
+                { "name": "Access-Control-Allow-Origin", "value": "*" },
+                { "name": "Cache-Control", "value": "public, max-age=30" }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "connections": {
+      "API Webhook": {
+        "main": [[{ "node": "Query State", "type": "main", "index": 0 }]]
+      },
+      "Query State": {
+        "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": true
+    },
+    "meta": {
+      "aiBuilderAssisted": true,
+      "builderVariant": "mcp"
+    }
+  }
+]

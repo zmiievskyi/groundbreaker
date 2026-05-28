@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-paper text-ink font-mono text-[13px] leading-relaxed;
+  }
+  a {
+    @apply underline decoration-line decoration-1 underline-offset-2 hover:decoration-ink;
+  }
+}

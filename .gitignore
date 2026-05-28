@@ -25,3 +25,8 @@ scratch/
 
 # private context — application/JD docs, kept local for reference, never pushed
 .context/
+
+# frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
