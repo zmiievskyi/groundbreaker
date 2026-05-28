@@ -145,6 +145,10 @@ This is a **dry-run** system, by design:
 - **Source ToS respected**: rate-limited HTTP nodes, retries with exponential backoff, ScrapingBee for LinkedIn (not raw scraping).
 - **Hunter budget protected** behind the score gate.
 
+## Note
+
+Parts of the repository hardening and security cleanup were prepared with Codex assistance, then reviewed and applied manually.
+
 ---
 
 *Built solo over ~3 working days as proof-of-work for the Lumina AI Applications Specialist role. See `CHANGELOG.md` for the build journal.*
