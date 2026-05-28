@@ -1,6 +1,6 @@
 # Showcase deployment
 
-How the public-facing dashboard at `groundbreaker.revops.it.com` is wired up.
+How the public-facing dashboard at `DASHBOARD_HOST` is wired up.
 
 ## Architecture
 
@@ -10,10 +10,11 @@ Internet
 Cloudflare tunnel  (cloudflared container, cloudflare_default network)
   ↓ (plain HTTP)
 Caddy reverse proxy  (caddy container, joined to BOTH networks)
-  ├── groundbreaker.revops.it.com
+  ├── DASHBOARD_HOST
   │     ├── /api/*        → rewrites to /webhook/* → n8n (99 API workflow)
+  │     ├── /form/*       → reverse-proxy → n8n form endpoints
   │     └── /*            → static files from frontend/dist (React SPA)
-  └── n8n.revops.it.com  → reverse-proxy → n8n UI (port 5678)
+  └── N8N_PUBLIC_HOST     → reverse-proxy → n8n UI (port 5678)
        (Caddy injects n8n's basic-auth header so HR sees only one prompt)
 ```
 
@@ -31,8 +32,8 @@ In **one.dash.cloudflare.com → Networks → Tunnels → [your tunnel] → Publ
 
 | Subdomain | Domain | Service |
 |-----------|--------|---------|
-| `groundbreaker` | `revops.it.com` | `http://caddy:80` |
-| `n8n` | `revops.it.com` | `http://caddy:80` |
+| `<dashboard-subdomain>` | `<your-domain>` | `http://caddy:80` |
+| `<n8n-subdomain>` | `<your-domain>` | `http://caddy:80` |
 
 Both point at the same caddy container; caddy differentiates by `Host` header.
 
@@ -44,7 +45,7 @@ Both point at the same caddy container; caddy differentiates by `Host` header.
 ```bash
 cp .env.example .env                         # fill in API keys
 docker run --rm caddy:2-alpine \
-  caddy hash-password --plaintext 'YOUR-PASS'  # paste hash into Caddyfile
+  caddy hash-password --plaintext 'YOUR-PASS'  # paste into .env as BASIC_AUTH_HASH
 echo -n "admin:<n8n_password>" | base64       # paste into .env as N8N_INTERNAL_AUTH
 
 cd frontend && npm install && npm run build && cd ..
@@ -62,27 +63,27 @@ CADDY_IP=$(docker inspect groundbreaker-caddy-1 \
 
 # Should be 401:
 curl -o /dev/null -w "%{http_code}\n" \
-  --resolve "groundbreaker.revops.it.com:80:$CADDY_IP" \
-  http://groundbreaker.revops.it.com/
+  --resolve "groundbreaker.example.com:80:$CADDY_IP" \
+  http://groundbreaker.example.com/
 
 # Should be 200, returning the dashboard HTML:
-curl --resolve "groundbreaker.revops.it.com:80:$CADDY_IP" \
+curl --resolve "groundbreaker.example.com:80:$CADDY_IP" \
   -u "lumina:YOUR-PASS" \
-  http://groundbreaker.revops.it.com/ | head
+  http://groundbreaker.example.com/ | head
 
 # Should return live pipeline state JSON:
-curl --resolve "groundbreaker.revops.it.com:80:$CADDY_IP" \
+curl --resolve "groundbreaker.example.com:80:$CADDY_IP" \
   -u "lumina:YOUR-PASS" \
-  http://groundbreaker.revops.it.com/api/state | jq .stats
+  http://groundbreaker.example.com/api/state | jq .stats
 ```
 
 ## Auth model
 
 - HR enters `lumina` / `<password>` once at the browser prompt.
-- Caddy validates against its bcrypt hash. The hash is inlined in `Caddyfile`
-  (one-way; not secret). The password is the shared credential.
-- For requests to n8n (UI on `n8n.revops.it.com` or `/api/*` on the dashboard
-  domain), Caddy injects n8n's own basic-auth header upstream. n8n's
+- Caddy validates against `BASIC_AUTH_HASH` from `.env`. The password is the
+  shared credential.
+- For requests to n8n (UI on `N8N_PUBLIC_HOST`, `/api/*`, or `/form/*` on the
+  dashboard domain), Caddy injects n8n's own basic-auth header upstream. n8n's
   `N8N_BASIC_AUTH_*` stays active in case anyone bypasses Caddy.
 - LAN-direct access to `http://<vm-ip>:5678` still requires n8n's `admin`
   password — defense-in-depth.

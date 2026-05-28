@@ -89,6 +89,7 @@ type WorkflowMeta = {
 };
 
 const WORKFLOWS = workflowsMeta as Record<string, WorkflowMeta>;
+const APPROVAL_FORM_PATH = '/form/approve-lead';
 
 type State = {
   stats: Stats;
@@ -121,7 +122,7 @@ const STAGES: Stage[] = [
     what: 'Find large-grading construction projects in target regions (data centers first).',
     engine: 'serper.dev (search) → OpenAI mini (Information Extractor).',
     input: '"<region> data center construction permit 2025..2026"',
-    output: '{ name: "Second London data center campus", owner: "Vantage Data Centers", region: "uk", source_url: "https://vantage-dc.com/news/..." }',
+    output: '{ name: "Regional hyperscale campus", owner: "Example Infra Co.", region: "uk", source_url: "https://example.com/news/project-launch" }',
     notes: 'Grounding gate: extracted name must appear in the search snippet. Region is derived from the project state, not the query origin.',
   },
   {
@@ -516,7 +517,7 @@ export default function App() {
           approve or reject. Decisions stamp the database in real time and you'll see them reflected on next refresh.
         </p>
         <a
-          href="https://n8n.revops.it.com/form/approve-lead"
+          href={APPROVAL_FORM_PATH}
           target="_blank"
           rel="noreferrer"
           className="inline-block mt-3 border border-ink px-3 py-2 text-[12px] hover:bg-ink hover:text-paper"
@@ -560,7 +561,7 @@ export default function App() {
         <div className="grid sm:grid-cols-3 gap-4">
           <div>
             <div className="uppercase tracking-widest text-[10px] mb-1">try it</div>
-            <div><a href="https://n8n.revops.it.com/form/approve-lead" target="_blank" rel="noreferrer">approval form ↗</a></div>
+            <div><a href={APPROVAL_FORM_PATH} target="_blank" rel="noreferrer">approval form ↗</a></div>
             <div className="text-muted/80 text-[10px] mt-1">
               (n8n canvas is owner-only; live walkthrough available on call)
             </div>
