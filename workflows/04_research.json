@@ -1,6 +1,6 @@
 [
   {
-    "updatedAt": "2026-05-28T12:36:27.870Z",
+    "updatedAt": "2026-05-28T13:18:05.280Z",
     "createdAt": "2026-05-28T12:36:08.538Z",
     "id": "V5Wj4Ab0kfl0KYjV",
     "name": "04 Deep Research + Hunter",
@@ -80,7 +80,7 @@
           "schemaType": "fromJson",
           "jsonSchemaExample": "{ \"summary\": \"2-sentence overview of the specific project and company status.\", \"recent_news\": \"One concrete recent news/announcement with a date if possible.\", \"icebreaker_1\": \"Specific personalization hook for outreach: a recent groundbreaking, exec move, expansion announcement.\", \"icebreaker_2\": \"A second concrete hook (different angle).\", \"sources\": \"https://url1, https://url2\" }",
           "options": {
-            "systemPromptTemplate": "You research a B2B sales lead for Lumina (CA/UK startup providing excavation-as-a-service for grading-heavy construction projects, especially data centers). Use web search to find current, citable information for personalized first-touch outreach.\n\nFocus on:\n- The specific named project (status, scope, milestones, contractors)\n- The owner company (recent press, executive moves, expansion plans)\n- The contact persona (recent talks, job moves, articles)\n\nRules:\n- Be factual and concrete. Cite sources for any claim (sources field = comma-separated URLs you actually used).\n- If web search returns nothing useful for a field, leave it empty — do not invent.\n- Each icebreaker must reference a specific factual hook (a recent groundbreaking, an exec quote, a campus expansion). Avoid generic compliments.\n- Prefer recent / authoritative sources when web results conflict.",
+            "systemPromptTemplate": "You research a B2B sales lead for Lumina (CA/UK startup providing excavation-as-a-service for grading-heavy construction projects, especially data centers).\n\nThe input ALWAYS contains a real project, company, and contact — work with what's given. Never refuse to process the lead; never ask the user for more information. Your output is consumed by the workflow downstream.\n\nRULES (mandatory — violations make the output unusable):\n1. You MUST invoke web search at least twice before producing output.\n2. The 'sources' field MUST be a comma-separated list of REAL URLs you actually visited via web search. Descriptive text like 'reviewed industry outlets' is NOT acceptable.\n3. NEVER invent specific facts (company descriptions, deal sizes, named executives, claimed quotes) that aren't backed by a source. If a fact has no source, omit it from the relevant field.\n4. If web search returns nothing useful for a field, set it to empty string \"\" — BUT still produce non-empty output for the lead overall. Always at least summarize the input lead and produce icebreakers grounded in what the input does say (project name, company name, contact's stated title).\n5. The summary must reference the actual project, company, and contact provided in the input — not generic SaaS / cloud / B2B patterns.\n\nFocus on:\n- The specific named project (status, scope, recent milestones, named contractors)\n- The owner company (recent press, executive moves, expansion announcements)\n- The contact (recent talks, conference appearances, articles)\n\nIcebreakers must reference a specific factual hook with a date if possible (a recent groundbreaking, an exec quote, a named expansion). If web search yielded nothing specific, ground icebreakers in the contact's stated role + company + project type from the input.",
             "batching": {
               "batchSize": 1,
               "delayBetweenBatches": 0
@@ -107,13 +107,13 @@
           "responsesApiEnabled": true,
           "builtInTools": {
             "webSearch": {
-              "searchContextSize": "medium"
+              "searchContextSize": "high"
             }
           },
           "options": {
             "timeout": 240000,
             "maxRetries": 3,
-            "reasoningEffort": "low"
+            "reasoningEffort": "medium"
           }
         },
         "credentials": {
@@ -308,9 +308,9 @@
       "builderVariant": "mcp"
     },
     "pinData": null,
-    "versionId": "19980b4e-a6a0-489d-b45e-7615195dc693",
+    "versionId": "245e9175-57cb-4fb2-9c3f-8d8c9c341250",
     "activeVersionId": null,
-    "versionCounter": 1,
+    "versionCounter": 3,
     "triggerCount": 0,
     "tags": [],
     "shared": [
