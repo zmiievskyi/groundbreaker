@@ -28,6 +28,18 @@ Region-parameterized queries, e.g.:
 | Contact email | Hunter free tier, RocketReach free, company site | Apollo / Clay |
 | People search | browser agent on LinkedIn + Google + LLM extraction | Sales Navigator |
 
+### Hunter budget — reserve for top-scored leads
+
+Hunter Free tier = **50 searches + 50 verifications / month** (resets monthly), the scarcest
+resource in the stack. CLAUDE.md targets enrichment "over hundreds of records," so Hunter
+**cannot** run during bulk ENRICH. Policy:
+
+- **Firmographics + decision-maker _names_** resolve early (gov portals + press + browser agent),
+  at **zero Hunter cost** — this is what feeds the fit-score.
+- **Hunter email lookup runs only in DEEP RESEARCH (stage 4)**, after the `MIN_FIT_SCORE` gate,
+  so credits are spent only on leads that already cleared the bar.
+- Lookups are **cached/deduped by company domain** — a domain is never spent twice.
+
 ## Compliance
 
 Respect each source's ToS and rate limits. The pipeline is dry-run: it discovers and drafts only.

@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://192.168.4.208:5678/mcp-server/http",
+        "--allow-http",
+        "--header",
+        "Authorization:Bearer ${N8N_MCP_TOKEN}"
+      ],
+      "env": {
+        "N8N_MCP_TOKEN": "REPLACE_WITH_N8N_MCP_TOKEN"
+      }
+    }
+  }
+}

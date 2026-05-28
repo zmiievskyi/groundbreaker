@@ -26,20 +26,30 @@ services:
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
       N8N_HOST: ${N8N_HOST}
       N8N_PORT: 5678
+      # demo is accessed over plain HTTP on the LAN; n8n's secure cookie
+      # requires HTTPS, so disable it (local/dry-run only — front with TLS for real use)
+      N8N_SECURE_COOKIE: "false"
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      # keep n8n's ~90 internal tables in their own schema so `public`
+      # holds only the application domain (projects/companies/leads/…)
+      DB_POSTGRESDB_SCHEMA: n8n
       # provider keys available to workflow nodes
       SERP_API_KEY: ${SERP_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       HUNTER_API_KEY: ${HUNTER_API_KEY}
+      SCRAPINGBEE_API_KEY: ${SCRAPINGBEE_API_KEY:-}
       TARGET_REGIONS: ${TARGET_REGIONS}
       MIN_FIT_SCORE: ${MIN_FIT_SCORE}
       SANDBOX_OUTREACH_EMAIL: ${SANDBOX_OUTREACH_EMAIL}
+      # allow Code nodes to read $env (so TARGET_REGIONS et al. drive workflows
+      # instead of being hardcoded) — the Code sandbox blocks env access by default
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
